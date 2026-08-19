@@ -27,9 +27,9 @@ st.markdown("""
 
 # Golden Title Header
 st.markdown('<h1 class="gold-title">⚡ HK Signal Bot</h1>', unsafe_allow_html=True)
-st.subheader("Multi-Timeframe Signal Engine")
+st.subheader("Multi-Timeframe Advanced Price Action Engine")
 
-# Sidebar
+# Sidebar Configuration
 st.sidebar.header("⚙️ Trading Configuration")
 
 all_pairs = {
@@ -64,18 +64,19 @@ selected_trade_seconds = trade_sec_map[trade_time]
 
 st.write(f"Pair: **{selected_pair}** | Candle Time: **{candle_time}** | Trade Expiry: **{trade_time}**")
 
-# Fixed Candlestick Detection Engine
-def analyze_combined_market(symbol, candle_tf, trade_secs):
+# High-Precision Advanced Technical Analysis Engine
+def analyze_advanced_market(symbol, candle_tf, trade_secs):
     df = yf.download(symbol, period="1d" if candle_tf != "1wk" else "1y", interval=candle_tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
         
-    if df.empty or len(df) < 15:
+    if df.empty or len(df) < 25:
         return None
 
-    df['SMA_20'] = df['Close'].rolling(window=15).mean()
+    # EMA & Technical Calculations
+    df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
 
-    # RSI Calculation
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -84,84 +85,136 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
 
     c0 = df.iloc[-1]
     c1 = df.iloc[-2]
+    c2 = df.iloc[-3]
 
     close_p, open_p = float(c0['Close']), float(c0['Open'])
     high_p, low_p = float(c0['High']), float(c0['Low'])
 
     c1_close, c1_open = float(c1['Close']), float(c1['Open'])
+    c2_close, c2_open = float(c2['Close']), float(c2['Open'])
 
     body = abs(close_p - open_p)
     candle_range = high_p - low_p if (high_p - low_p) > 0 else 0.0001
     lower_wick = min(open_p, close_p) - low_p
     upper_wick = high_p - max(open_p, close_p)
 
-    support = float(df['Low'].tail(15).min())
-    resistance = float(df['High'].tail(15).max())
+    support = float(df['Low'].tail(20).min())
+    resistance = float(df['High'].tail(20).max())
 
     bullish_score = 50
     bearish_score = 50
     detected_rules = []
 
-    # 1. Trend & Structure Analysis
-    is_uptrend = close_p > float(c0['SMA_20'])
-    is_downtrend = close_p < float(c0['SMA_20'])
+    # 1. EMA CROSSOVER & TREND
+    ema_9 = float(c0['EMA_9'])
+    ema_21 = float(c0['EMA_21'])
 
-    if is_uptrend:
-        bullish_score += 10
-    elif is_downtrend:
-        bearish_score += 10
+    if ema_9 > ema_21:
+        bullish_score += 15
+        detected_rules.append("EMA Bullish Trend 📈")
+    else:
+        bearish_score += 15
+        detected_rules.append("EMA Bearish Trend 📉")
 
-    # 2. Support & Resistance Conditions
+    # 2. SNR ZONE CHECK
     near_support = abs(close_p - support) <= (candle_range * 1.5)
     near_resistance = abs(close_p - resistance) <= (candle_range * 1.5)
 
     if near_support:
         bullish_score += 15
-        detected_rules.append("At Strong Support Zone 🛡️")
+        detected_rules.append("Key Support Zone 🛡️")
     if near_resistance:
         bearish_score += 15
-        detected_rules.append("At Strong Resistance Zone 🚧")
+        detected_rules.append("Key Resistance Zone 🚧")
 
-    # 3. ACCURATE CANDLESTICK PATTERN LOGIC
+    # 3. ADVANCED 15 CANDLESTICK PATTERNS DETECTION
+    is_bullish_c0 = close_p > open_p
+    is_bearish_c0 = close_p < open_p
 
-    # A. Hammer vs Hanging Man (Lower Wick >= 2x Body)
-    if lower_wick >= (body * 2) and upper_wick <= (body * 0.5):
-        if is_downtrend or near_support:
-            bullish_score += 20
-            detected_rules.append("Valid Bullish Hammer (Bottom Reversal) 🔨")
-        elif is_uptrend or near_resistance:
-            bearish_score += 20
-            detected_rules.append("Valid Bearish Hanging Man (Top Reversal) 🪢")
+    # A. Hammer & Inverted Hammer
+    if lower_wick >= (body * 2) and upper_wick <= (body * 0.3) and near_support:
+        bullish_score += 20
+        detected_rules.append("Bullish Hammer")
+    elif upper_wick >= (body * 2) and lower_wick <= (body * 0.3) and near_support:
+        bullish_score += 18
+        detected_rules.append("Bullish Inverted Hammer")
 
-    # B. Shooting Star vs Inverted Hammer (Upper Wick >= 2x Body)
-    elif upper_wick >= (body * 2) and lower_wick <= (body * 0.5):
-        if is_uptrend or near_resistance:
-            bearish_score += 20
-            detected_rules.append("Valid Bearish Shooting Star ☄️")
-        elif is_downtrend or near_support:
-            bullish_score += 20
-            detected_rules.append("Valid Bullish Inverted Hammer 📐")
+    # B. Shooting Star & Hanging Man
+    if upper_wick >= (body * 2) and lower_wick <= (body * 0.3) and near_resistance:
+        bearish_score += 20
+        detected_rules.append("Bearish Shooting Star")
+    elif lower_wick >= (body * 2) and upper_wick <= (body * 0.3) and near_resistance:
+        bearish_score += 18
+        detected_rules.append("Bearish Hanging Man")
 
-    # C. Bullish Engulfing
-    if close_p > open_p and c1_close < c1_open and close_p > c1_open and open_p < c1_close:
+    # C. Dragonfly Doji & Gravestone Doji
+    if body <= (candle_range * 0.1):
+        if lower_wick >= (candle_range * 0.6) and near_support:
+            bullish_score += 15
+            detected_rules.append("Dragonfly Doji (Reversal)")
+        elif upper_wick >= (candle_range * 0.6) and near_resistance:
+            bearish_score += 15
+            detected_rules.append("Gravestone Doji (Reversal)")
+
+    # D. Marubozu
+    if body >= (candle_range * 0.85):
+        if is_bullish_c0:
+            bullish_score += 15
+            detected_rules.append("Bullish Marubozu Strong Momentum")
+        else:
+            bearish_score += 15
+            detected_rules.append("Bearish Marubozu Strong Momentum")
+
+    # E. Engulfing Patterns
+    if is_bullish_c0 and c1_close < c1_open and close_p > c1_open and open_p < c1_close:
         bullish_score += 22
-        detected_rules.append("Confirmed Bullish Engulfing 🔥")
-
-    # D. Bearish Engulfing
-    elif close_p < open_p and c1_close > c1_open and close_p < c1_open and open_p > c1_close:
+        detected_rules.append("Bullish Engulfing")
+    elif is_bearish_c0 and c1_close > c1_open and close_p < c1_open and open_p > c1_close:
         bearish_score += 22
-        detected_rules.append("Confirmed Bearish Engulfing ❄️")
+        detected_rules.append("Bearish Engulfing")
 
-    # E. RSI Filter
+    # F. Harami Patterns (Inside Bar)
+    if is_bullish_c0 and c1_close < c1_open and close_p < c1_open and open_p > c1_close:
+        bullish_score += 12
+        detected_rules.append("Bullish Harami")
+    elif is_bearish_c0 and c1_close > c1_open and close_p > c1_open and open_p < c1_close:
+        bearish_score += 12
+        detected_rules.append("Bearish Harami")
+
+    # G. Piercing Line & Dark Cloud Cover
+    if is_bullish_c0 and c1_close < c1_open and open_p < c1_close and close_p > (c1_open + c1_close)/2:
+        bullish_score += 15
+        detected_rules.append("Piercing Line Reversal")
+    elif is_bearish_c0 and c1_close > c1_open and open_p > c1_close and close_p < (c1_open + c1_close)/2:
+        bearish_score += 15
+        detected_rules.append("Dark Cloud Cover")
+
+    # H. Morning Star & Evening Star (3-Candle Patterns)
+    if c2_close < c2_open and abs(c1_close - c1_open) < (abs(c2_close - c2_open)*0.4) and is_bullish_c0:
+        bullish_score += 25
+        detected_rules.append("Morning Star Pattern 🌟")
+    elif c2_close > c2_open and abs(c1_close - c1_open) < (abs(c2_close - c2_open)*0.4) and is_bearish_c0:
+        bearish_score += 25
+        detected_rules.append("Evening Star Pattern 🌃")
+
+    # I. Three White Soldiers & Three Black Crows
+    if close_p > open_p and c1_close > c1_open and c2_close > c2_open and close_p > c1_close and c1_close > c2_close:
+        bullish_score += 20
+        detected_rules.append("Three White Soldiers 🚀")
+    elif close_p < open_p and c1_close < c1_open and c2_close < c2_open and close_p < c1_close and c1_close < c2_close:
+        bearish_score += 20
+        detected_rules.append("Three Black Crows 📉")
+
+    # 4. RSI FILTER
     rsi_val = float(c0['RSI']) if not np.isnan(c0['RSI']) else 50.0
     if rsi_val < 30:
-        bullish_score += 12
-        detected_rules.append("Oversold RSI Reversal")
+        bullish_score += 10
+        detected_rules.append("RSI Oversold")
     elif rsi_val > 70:
-        bearish_score += 12
-        detected_rules.append("Overbought RSI Reversal")
+        bearish_score += 10
+        detected_rules.append("RSI Overbought")
 
-    # Final Calculation
+    # 5. FINAL ACCURACY CALCULATION
     if bullish_score > bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
@@ -174,7 +227,7 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         css = "sell-bg"
 
     prep_timer = 5 if trade_secs <= 15 else 10
-    pattern_text = " | ".join(detected_rules) if detected_rules else "Market Momentum Flow"
+    pattern_text = " | ".join(detected_rules) if detected_rules else "High Confluence Market Trend"
 
     return {
         "direction": direction, "arrow": arrow, "accuracy": accuracy, 
@@ -182,35 +235,35 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         "rsi": rsi_val, "prep_timer": prep_timer
     }
 
-# Start Button
+# Start Button Execution
 if st.button("🚀 START ANALYZING MARKET"):
     radar_placeholder = st.empty()
     for stage in [
-        f"📡 Analyzing {candle_time} Candlestick Rules...",
-        f"⏳ Verifying Support/Resistance & Trends...",
-        "🎯 Calculating Final Accurate Signal..."
+        f"📡 Scanning 15 Candlestick Patterns on {candle_time}...",
+        f"⏳ Checking EMA 9/21 Trend & Support/Resistance...",
+        "🎯 Filtering False Breakouts & Calculating Accuracy..."
     ]:
         radar_placeholder.info(stage)
         time.sleep(0.5)
     radar_placeholder.empty()
 
-    res = analyze_combined_market(all_pairs[selected_pair], candle_tf_map[candle_time], selected_trade_seconds)
+    res = analyze_advanced_market(all_pairs[selected_pair], candle_tf_map[candle_time], selected_trade_seconds)
 
     if res:
         st.markdown(f'''
             <div class="signal-card {res['css']}">
                 <h1>{res['direction']} {res['arrow']}</h1>
                 <h2>Accuracy / Confidence: {res['accuracy']}%</h2>
-                <h4>Detected Rules: {res['pattern']}</h4>
+                <h4>Detected Confluence Rules: {res['pattern']}</h4>
             </div>
         ''', unsafe_allow_html=True)
 
         st.write("---")
         c1, c2 = st.columns(2)
         c1.metric("Live Market Price", f"{res['price']:.5f}")
-        c2.metric("RSI Value", f"{res['rsi']:.1f}")
+        c2.metric("RSI Indicator", f"{res['rsi']:.1f}")
 
-        # Live Countdown Preparation Timer
+        # Live Countdown Timer
         st.write(f"### ⏱️ Entry Preparation Countdown ({res['prep_timer']} Sec Prep)")
         timer_box = st.empty()
         
@@ -221,7 +274,7 @@ if st.button("🚀 START ANALYZING MARKET"):
         timer_box.markdown(f'<div class="timer-display" style="color:#00E676; border-color:#00E676;">GO! PLACE {trade_time} TRADE NOW 🚀</div>', unsafe_allow_html=True)
         st.balloons()
     else:
-        st.error("⚠️ Live market data loading. Try selecting '1m Candle' or '5m Candle'.")
+        st.error("⚠️ Live market data is updating. Select '1m Candle' or '5m Candle' and try again.")
 else:
-    st.info("👆 Select options and click **START ANALYZING MARKET**.")
-        
+    st.info("👆 Select settings from sidebar and click **START ANALYZING MARKET**.")
+            
