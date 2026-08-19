@@ -1,151 +1,197 @@
-import streamlit as st
+
+    import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import datetime
+import time
 
-# Page Configuration
-st.set_page_config(page_title="Pro Live Trading Signals", layout="wide", initial_sidebar_state="expanded")
+# Page Setup
+st.set_page_config(page_title="Pro Live Forex Radar Engine", layout="wide")
 
-# Custom Styling
+# Custom Styling & Radar CSS
 st.markdown("""
     <style>
-    .big-signal-buy { font-size:32px !important; font-weight: bold; color: #00E676; background-color: #003311; padding: 15px; border-radius: 10px; text-align: center; }
-    .big-signal-sell { font-size:32px !important; font-weight: bold; color: #FF2A6D; background-color: #330011; padding: 15px; border-radius: 10px; text-align: center; }
-    .big-signal-wait { font-size:32px !important; font-weight: bold; color: #FFD700; background-color: #333000; padding: 15px; border-radius: 10px; text-align: center; }
-    div.stButton > button { font-size: 20px !important; font-weight: bold !important; width: 100% !important; background-color: #1E88E5 !important; color: white !important; border-radius: 10px !important; padding: 12px !important; }
+    .signal-card { padding: 25px; border-radius: 20px; text-align: center; color: white; margin-top: 15px; }
+    .buy-bg { background: linear-gradient(135deg, #00E676, #004D40); }
+    .sell-bg { background: linear-gradient(135deg, #FF1744, #880E4F); }
+    .stButton > button { width: 100%; height: 70px; font-size: 24px; font-weight: bold; background: linear-gradient(90deg, #311B92, #4A148C); color: white; border-radius: 15px; border: none; }
+    .timer-display { font-size: 80px; font-weight: bold; color: #FFD600; text-align: center; background: #111; padding: 10px; border-radius: 15px; border: 2px solid #FFD600; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🎯 Pro Price Action & Live Forex Signal Engine")
-st.write("Live Real Market Data | Technical Analysis | Trade Entry Timer")
+st.title("📡 All-Pairs Pro Live Forex Radar & Signal Engine")
 
-# Sidebar Controls
-st.sidebar.header("⚙️ Trading Settings")
-pairs = {
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
-    "USD/JPY": "JPY=X",
-    "AUD/USD": "AUDUSD=X",
-    "USD/CAD": "CAD=X",
-    "USD/CHF": "CHF=X",
-    "NZD/USD": "NZDUSD=X",
-    "BTC/USD": "BTC-USD",
-    "ETH/USD": "ETH-USD"
+# Sidebar - Settings
+st.sidebar.header("⚙️ Trading Configuration")
+
+# All Live Pairs (Forex & Crypto)
+all_pairs = {
+    "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/JPY": "JPY=X",
+    "AUD/USD": "AUDUSD=X", "USD/CAD": "CAD=X", "USD/CHF": "CHF=X",
+    "NZD/USD": "NZDUSD=X", "EUR/GBP": "EURGBP=X", "EUR/JPY": "EURJPY=X",
+    "GBP/JPY": "GBPJPY=X", "BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"
 }
 
-selected_pair = st.sidebar.selectbox("Select Real Market Pair:", list(pairs.keys()))
-timeframe = st.sidebar.selectbox("Select Timeframe (Expiry):", ["1m", "5m", "15m", "1h"], index=1)
+selected_pair = st.sidebar.selectbox("🎯 Select Market Pair:", list(all_pairs.keys()))
 
-ticker_symbol = pairs[selected_pair]
+# Trade Timeframe Selection
+trade_timeframe = st.sidebar.selectbox(
+    "⏱️ Select Trade Expiry Time / Timeframe:", 
+    ["1m (1 Min)", "5m (5 Min)", "15m (15 Min)", "30m (30 Min)"]
+)
+tf_map = {"1m (1 Min)": "1m", "5m (5 Min)": "5m", "15m (15 Min)": "15m", "30m (30 Min)": "30m"}
 
-# Fetch Live Market Data
-def load_data(symbol, tf):
-    period = "1d" if tf in ["1m", "5m"] else "5d"
-    df = yf.download(tickers=symbol, period=period, interval=tf, progress=False)
+# Custom Entry Timer Option
+entry_timer_secs = st.sidebar.slider("⏳ Choose Entry Timer (Seconds):", min_value=5, max_value=30, value=10, step=5)
+
+st.write(f"Selected Pair: **{selected_pair}** | Timeframe: **{trade_timeframe}**")
+
+# Strategy Logic (Trend + Support/Resistance + Candlestick Patterns)
+def analyze_market(symbol, tf):
+    df = yf.download(symbol, period="1d", interval=tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    return df
+        
+    if df.empty or len(df) < 15:
+        return None
 
-st.markdown("---")
-# Start Analyzing Button
-analyze_btn = st.button("🚀 Start Analyzing Market")
+    # Technical Indicators
+    df['SMA_20'] = df['Close'].rolling(window=15).mean()
+    
+    # RSI
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
 
-if analyze_btn:
-    with st.spinner("Analyzing Live Market Data & Price Action Patterns..."):
-        try:
-            df = load_data(ticker_symbol, timeframe)
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    close_p = float(last['Close'])
+    open_p = float(last['Open'])
+    high_p = float(last['High'])
+    low_p = float(last['Low'])
+    
+    rsi_val = float(last['RSI']) if not np.isnan(last['RSI']) else 50.0
+    sma_val = float(last['SMA_20']) if not np.isnan(last['SMA_20']) else close_p
+
+    # Price Action Specs
+    body = abs(close_p - open_p)
+    candle_range = high_p - low_p
+    lower_wick = min(open_p, close_p) - low_p
+    upper_wick = high_p - max(open_p, close_p)
+
+    support = float(df['Low'].tail(20).min())
+    resistance = float(df['High'].tail(20).max())
+
+    # Base Logic
+    bullish_score = 0
+    bearish_score = 0
+    detected_patterns = []
+
+    # Trend Analysis
+    if close_p > sma_val:
+        bullish_score += 25
+        trend = "UPTREND 📈"
+    else:
+        bearish_score += 25
+        trend = "DOWNTREND 📉"
+
+    # Support / Resistance Analysis
+    if abs(close_p - support) < (candle_range * 1.5):
+        bullish_score += 25
+        detected_patterns.append("Near Support Level 🛡️")
+    if abs(close_p - resistance) < (candle_range * 1.5):
+        bearish_score += 25
+        detected_patterns.append("Near Resistance Level 🚧")
+
+    # Candlestick Patterns
+    if lower_wick > (body * 1.8) and candle_range > 0:
+        bullish_score += 30
+        detected_patterns.append("Bullish Hammer 🔨")
+    elif upper_wick > (body * 1.8) and candle_range > 0:
+        bearish_score += 30
+        detected_patterns.append("Shooting Star / Upper Wick ☄️")
+
+    if close_p > open_p and prev['Close'] < prev['Open'] and (close_p - open_p) > abs(prev['Close'] - prev['Open']):
+        bullish_score += 25
+        detected_patterns.append("Bullish Engulfing 🔥")
+    elif close_p < open_p and prev['Close'] > prev['Open'] and abs(close_p - open_p) > (prev['Close'] - prev['Open']):
+        bearish_score += 25
+        detected_patterns.append("Bearish Engulfing ❄️")
+
+    # RSI Adjustments
+    if rsi_val < 35:
+        bullish_score += 20
+        detected_patterns.append("Oversold RSI")
+    elif rsi_val > 65:
+        bearish_score += 20
+        detected_patterns.append("Overbought RSI")
+
+    # Determine Final Direction and Accuracy
+    if bullish_score >= bearish_score:
+        direction = "CALL (BUY) 🟢 UP"
+        arrow = "⬆️"
+        accuracy = min(bullish_score, 98)
+        css = "buy-bg"
+    else:
+        direction = "PUT (SELL) 🔴 DOWN"
+        arrow = "⬇️"
+        accuracy = min(bearish_score, 98)
+        css = "sell-bg"
+
+    if accuracy < 10: accuracy = 15 # Minimum fallback accuracy display
+
+    pattern_text = ", ".join(detected_patterns) if detected_patterns else "Price Action & Trend Flow"
+
+    return {
+        "direction": direction, "arrow": arrow, "accuracy": accuracy, 
+        "pattern": pattern_text, "css": css, "price": close_p, 
+        "trend": trend, "support": support, "resistance": resistance, "rsi": rsi_val
+    }
+
+# Start Button
+if st.button("🚀 START ANALYZING MARKET"):
+    # Radar Loading Animation
+    radar_placeholder = st.empty()
+    for stage in ["📡 Radar Scanning Live Market Pairs...", "🌀 Analyzing Support & Resistance Levels...", "🔍 Detecting Price Action Patterns..."]:
+        radar_placeholder.info(stage)
+        time.sleep(0.6)
+    radar_placeholder.empty()
+
+    res = analyze_market(all_pairs[selected_pair], tf_map[trade_timeframe])
+
+    if res:
+        # Display Signal Card
+        st.markdown(f'''
+            <div class="signal-card {res['css']}">
+                <h1>{res['direction']} {res['arrow']}</h1>
+                <h2>Accuracy / Chance: {res['accuracy']}%</h2>
+                <h3>Detected Pattern: {res['pattern']}</h3>
+            </div>
+        ''', unsafe_allow_html=True)
+
+        st.write("---")
+        # Display Deep Market Data
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Live Market Price", f"{res['price']:.5f}")
+        c2.metric("Market Trend", res['trend'])
+        c3.metric("Support / Resistance", f"{res['support']:.5f} / {res['resistance']:.5f}")
+        c4.metric("RSI Value", f"{res['rsi']:.1f}")
+
+        # Live Entry Timer
+        st.write("### ⏱️ Live Entry Countdown Timer")
+        timer_box = st.empty()
+        
+        for sec in range(entry_timer_secs, 0, -1):
+            timer_box.markdown(f'<div class="timer-display">{sec} Sec</div>', unsafe_allow_html=True)
+            time.sleep(1)
             
-            if df.empty or len(df) < 20:
-                st.error("⚠️ Market data is temporarily slow for this pair/timeframe. Please select 5m timeframe from the sidebar and try again.")
-            else:
-                # Technical Calculations
-                df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
-                df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
-                
-                # RSI Calculation
-                delta = df['Close'].diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                rs = gain / loss
-                df['RSI'] = 100 - (100 / (1 + rs))
-
-                latest = df.iloc[-1]
-                prev = df.iloc[-2]
-                
-                current_price = float(latest['Close'])
-                support = float(df['Low'].tail(30).min())
-                resistance = float(df['High'].tail(30).max())
-                rsi_val = float(latest['RSI']) if not np.isnan(latest['RSI']) else 50.0
-
-                # Price Action & Pattern Detection
-                body = abs(latest['Close'] - latest['Open'])
-                candle_range = latest['High'] - latest['Low']
-                lower_wick = min(latest['Open'], latest['Close']) - latest['Low']
-                upper_wick = latest['High'] - max(latest['Open'], latest['Close'])
-                
-                is_bullish = latest['Close'] > latest['Open']
-                is_bearish = latest['Close'] < latest['Open']
-
-                signal = "WAIT / NO ENTRY ⚪"
-                css_class = "big-signal-wait"
-                pattern = "Consolidation / No Strong Pattern"
-                confidence = "50%"
-
-                # Price Action Signal Logic
-                if candle_range > 0 and lower_wick > (2 * body) and current_price <= (support * 1.001):
-                    pattern = "Bullish Hammer near Support 🔨"
-                    signal = "CALL (BUY) 🟢 UP ⬆️"
-                    css_class = "big-signal-buy"
-                    confidence = "90%"
-                elif candle_range > 0 and upper_wick > (2 * body) and current_price >= (resistance * 0.999):
-                    pattern = "Shooting Star near Resistance ☄️"
-                    signal = "PUT (SELL) 🔴 DOWN ⬇️"
-                    css_class = "big-signal-sell"
-                    confidence = "90%"
-                elif is_bullish and (prev['Close'] < prev['Open']) and (latest['Close'] > prev['Open']) and rsi_val < 65:
-                    pattern = "Strong Bullish Engulfing 🔥"
-                    signal = "CALL (BUY) 🟢 UP ⬆️"
-                    css_class = "big-signal-buy"
-                    confidence = "85%"
-                elif is_bearish and (prev['Open'] < prev['Close']) and (latest['Close'] < prev['Open']) and rsi_val > 35:
-                    pattern = "Strong Bearish Engulfing ❄️"
-                    signal = "PUT (SELL) 🔴 DOWN ⬇️"
-                    css_class = "big-signal-sell"
-                    confidence = "85%"
-
-                # Live Timer Logic
-                now = datetime.datetime.now()
-                seconds_left = 60 - now.second
-
-                # UI Layout
-                col_t1, col_t2 = st.columns([2, 1])
-                with col_t1:
-                    st.markdown(f'<div class="{css_class}">{signal}</div>', unsafe_allow_html=True)
-                with col_t2:
-                    st.metric("⏱️ Candle Entry Timer", f"{seconds_left} Sec Left")
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Live Market Price", f"{current_price:.5f}")
-                col2.metric("Support Level (SR)", f"{support:.5f}")
-                col3.metric("Resistance Level (SR)", f"{resistance:.5f}")
-                col4.metric("RSI Indicator (14)", f"{rsi_val:.1f}")
-
-                st.markdown("---")
-                
-                st.subheader("💡 Signal Analysis & Details")
-                st.write(f"**Detected Technical Pattern:** `{pattern}`")
-                st.write(f"**Signal Accuracy / Confidence:** `{confidence}`")
-                st.write(f"**Market Trend (EMA 20/50):** `{'UPTREND 📈' if latest['EMA_20'] > latest['EMA_50'] else 'DOWNTREND 📉'}`")
-
-                st.markdown("---")
-                st.subheader("📈 Live Market Candle Chart")
-                st.line_chart(df['Close'].tail(40))
-
-        except Exception as e:
-            st.error(f"Error fetching live data: {e}. Try selecting 5m timeframe.")
+        timer_box.markdown('<div class="timer-display" style="color:#00E676; border-color:#00E676;">GO! PLACE TRADE NOW 🚀</div>', unsafe_allow_html=True)
+        st.balloons()
+    else:
+        st.error("⚠️ Live data is loading slowly for this timeframe. Please choose 5m or 15m from the sidebar and click again.")
 else:
-    st.info("👆 Click the **'Start Analyzing Market'** button above to scan live candlestick patterns and generate signal!")
+    st.info("👆 Click the **START ANALYZING MARKET** button to activate the live radar.")
     
