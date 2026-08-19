@@ -31,13 +31,12 @@ all_pairs = {
 
 selected_pair = st.sidebar.selectbox("🎯 Select Market Pair:", list(all_pairs.keys()))
 
-# Expiry Time Selection (5 Sec to 10 Min)
+# Expiry Time Selection
 trade_timeframe = st.sidebar.selectbox(
     "⏱️ Select Expiry / Timeframe:", 
     ["5s Expiry", "10s Expiry", "15s Expiry", "30s Expiry", "1m Candle/Trade", "5m Candle/Trade", "10m Candle/Trade"]
 )
 
-# Timeframe Mapping for YFinance Data
 tf_map = {
     "5s Expiry": "1m", "10s Expiry": "1m", "15s Expiry": "1m", "30s Expiry": "1m",
     "1m Candle/Trade": "1m", "5m Candle/Trade": "5m", "10m Candle/Trade": "15m"
@@ -45,7 +44,7 @@ tf_map = {
 
 st.write(f"Pair: **{selected_pair}** | Selected Setting: **{trade_timeframe}**")
 
-# Strategy Engine with 15+ Patterns & Structure Analysis
+# Strategy Engine with Dynamic Fixed Accuracy Logic
 def analyze_advanced_market(symbol, tf):
     df = yf.download(symbol, period="1d", interval=tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
@@ -55,7 +54,6 @@ def analyze_advanced_market(symbol, tf):
         return None
 
     df['SMA_20'] = df['Close'].rolling(window=15).mean()
-    df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
 
     # RSI Calculation
     delta = df['Close'].diff()
@@ -66,96 +64,70 @@ def analyze_advanced_market(symbol, tf):
 
     c0 = df.iloc[-1] # Current Candle
     c1 = df.iloc[-2] # Previous Candle
-    c2 = df.iloc[-3] # 3rd Candle
 
     close_p, open_p = float(c0['Close']), float(c0['Open'])
     high_p, low_p = float(c0['High']), float(c0['Low'])
 
     body = abs(close_p - open_p)
-    candle_range = high_p - low_p
+    candle_range = high_p - low_p if (high_p - low_p) > 0 else 0.0001
     lower_wick = min(open_p, close_p) - low_p
     upper_wick = high_p - max(open_p, close_p)
 
     support = float(df['Low'].tail(20).min())
     resistance = float(df['High'].tail(20).max())
 
-    bullish_score = 0
-    bearish_score = 0
+    # BASE ACCURACY (Starts at 50%)
+    bullish_score = 50
+    bearish_score = 50
     detected_rules = []
 
     # 1. Market Structure Analysis (HH, HL, LH, LL)
     if float(c0['High']) > float(c1['High']) and float(c0['Low']) > float(c1['Low']):
-        bullish_score += 15
-        detected_rules.append("Structure: Higher High & Higher Low (HH/HL) 📈")
+        bullish_score += 12
+        detected_rules.append("Higher Highs (Uptrend) 📈")
     elif float(c0['High']) < float(c1['High']) and float(c0['Low']) < float(c1['Low']):
-        bearish_score += 15
-        detected_rules.append("Structure: Lower High & Lower Low (LH/LL) 📉")
+        bearish_score += 12
+        detected_rules.append("Lower Lows (Downtrend) 📉")
 
-    # 2. Trend & Moving Averages
+    # 2. Moving Average Trend
     if close_p > float(c0['SMA_20']):
         bullish_score += 10
     else:
         bearish_score += 10
 
-    # 3. Support & Resistance Reversals
-    if abs(close_p - support) < (candle_range * 1.2):
-        bullish_score += 20
-        detected_rules.append("SR: Strong Bounce at Support Level 🛡️")
-    elif abs(close_p - resistance) < (candle_range * 1.2):
-        bearish_score += 20
-        detected_rules.append("SR: Strong Rejection at Resistance Level 🚧")
+    # 3. Support & Resistance Bounce
+    if abs(close_p - support) <= (candle_range * 2):
+        bullish_score += 15
+        detected_rules.append("Support Level Touch 🛡️")
+    if abs(close_p - resistance) <= (candle_range * 2):
+        bearish_score += 15
+        detected_rules.append("Resistance Level Touch 🚧")
 
-    # 4. Detection of 15+ Candlestick Patterns
-    # Hammer & Hanging Man
-    if lower_wick > (body * 2) and upper_wick < (body * 0.5):
-        if close_p <= (support * 1.002):
-            bullish_score += 25
-            detected_rules.append("Pattern: Bullish Hammer near Support 🔨")
-        else:
-            bearish_score += 20
-            detected_rules.append("Pattern: Hanging Man 🪢")
+    # 4. Candlestick Patterns Analysis
+    if lower_wick >= (body * 1.5):
+        bullish_score += 18
+        detected_rules.append("Bullish Reversal Wick / Hammer 🔨")
+    elif upper_wick >= (body * 1.5):
+        bearish_score += 18
+        detected_rules.append("Bearish Reversal Wick / Shooting Star ☄️")
 
-    # Shooting Star & Inverted Hammer
-    elif upper_wick > (body * 2) and lower_wick < (body * 0.5):
-        if close_p >= (resistance * 0.998):
-            bearish_score += 25
-            detected_rules.append("Pattern: Shooting Star near Resistance ☄️")
-        else:
-            bullish_score += 20
-            detected_rules.append("Pattern: Inverted Hammer 📐")
-
-    # Engulfing Patterns
-    elif close_p > open_p and float(c1['Close']) < float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
-        bullish_score += 25
-        detected_rules.append("Pattern: Strong Bullish Engulfing 🔥")
+    if close_p > open_p and float(c1['Close']) < float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
+        bullish_score += 15
+        detected_rules.append("Bullish Engulfing Pattern 🔥")
     elif close_p < open_p and float(c1['Close']) > float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
-        bearish_score += 25
-        detected_rules.append("Pattern: Strong Bearish Engulfing ❄️")
+        bearish_score += 15
+        detected_rules.append("Bearish Engulfing Pattern ❄️")
 
-    # Doji & Spinning Top
-    elif body <= (candle_range * 0.1):
-        detected_rules.append("Pattern: Doji (Indecision Reversal) ⚖️")
-        if float(c0['RSI']) < 30: bullish_score += 15
-        if float(c0['RSI']) > 70: bearish_score += 15
+    # RSI Overbought/Oversold
+    rsi_val = float(c0['RSI']) if not np.isnan(c0['RSI']) else 50.0
+    if rsi_val < 35:
+        bullish_score += 10
+        detected_rules.append("Oversold RSI Reversal")
+    elif rsi_val > 65:
+        bearish_score += 10
+        detected_rules.append("Overbought RSI Reversal")
 
-    # Marubozu (Full Body Solid Candle)
-    elif body >= (candle_range * 0.85):
-        if close_p > open_p:
-            bullish_score += 20
-            detected_rules.append("Pattern: Bullish Marubozu 💪")
-        else:
-            bearish_score += 20
-            detected_rules.append("Pattern: Bearish Marubozu 🩸")
-
-    # Piercing Line & Dark Cloud Cover
-    elif float(c1['Close']) < float(c1['Open']) and open_p < float(c1['Low']) and close_p > (float(c1['Open']) + float(c1['Close'])) / 2:
-        bullish_score += 20
-        detected_rules.append("Pattern: Piercing Line Reversal ⛅")
-    elif float(c1['Close']) > float(c1['Open']) and open_p > float(c1['High']) and close_p < (float(c1['Open']) + float(c1['Close'])) / 2:
-        bearish_score += 20
-        detected_rules.append("Pattern: Dark Cloud Cover 🌧️")
-
-    # 5. Final Signal & Accuracy Calculation
+    # 5. Final Direction & Accuracy Calculation
     if bullish_score >= bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
@@ -167,28 +139,26 @@ def analyze_advanced_market(symbol, tf):
         accuracy = min(bearish_score, 98)
         css = "sell-bg"
 
-    if accuracy < 15: accuracy = 20
-
     # Auto Entry Timer Logic Based on Accuracy
-    if accuracy >= 85:
+    if accuracy >= 80:
         auto_timer = 5 # High Accuracy -> Fast 5 Sec Entry
     elif accuracy >= 65:
         auto_timer = 10 # Medium Accuracy -> 10 Sec Prep
     else:
         auto_timer = 15 # Lower Accuracy -> 15 Sec Prep
 
-    pattern_text = " | ".join(detected_rules) if detected_rules else "Price Action Structure & Momentum"
+    pattern_text = " | ".join(detected_rules) if detected_rules else "Price Momentum & Trend Flow"
 
     return {
         "direction": direction, "arrow": arrow, "accuracy": accuracy, 
         "pattern": pattern_text, "css": css, "price": close_p, 
-        "rsi": float(c0['RSI']), "auto_timer": auto_timer
+        "rsi": rsi_val, "auto_timer": auto_timer
     }
 
 # Start Button
 if st.button("🚀 START ANALYZING MARKET"):
     radar_placeholder = st.empty()
-    for stage in ["📡 Scanning 15+ Candlestick Patterns...", "🌀 Checking HH/HL Market Structure & SR...", "🎯 Calculating Auto-Timer & Signal..."]:
+    for stage in ["📡 Scanning Live Market Pairs...", "🌀 Checking Support & Resistance Levels...", "🎯 Calculating Accuracy & Auto-Timer..."]:
         radar_placeholder.info(stage)
         time.sleep(0.5)
     radar_placeholder.empty()
