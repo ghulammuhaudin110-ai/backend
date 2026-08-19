@@ -4,11 +4,19 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="Ultra Pro Multi-Timeframe Engine", layout="wide")
+st.set_page_config(page_title="HK Signal Bot", layout="wide")
 
 # Custom Styling
 st.markdown("""
     <style>
+    .gold-title {
+        font-size: 42px;
+        font-weight: 800;
+        background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #B8860B 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0px;
+    }
     .signal-card { padding: 25px; border-radius: 20px; text-align: center; color: white; margin-top: 15px; }
     .buy-bg { background: linear-gradient(135deg, #00E676, #004D40); }
     .sell-bg { background: linear-gradient(135deg, #FF1744, #880E4F); }
@@ -17,7 +25,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Ultra Pro Multi-Timeframe Signal Engine")
+# Golden Title Header
+st.markdown('<h1 class="gold-title">⚡ HK Signal Bot</h1>', unsafe_allow_html=True)
+st.subheader("Multi-Timeframe Signal Engine")
 
 # Sidebar - Dual Timeframe Configuration
 st.sidebar.header("⚙️ Trading Configuration")
@@ -137,7 +147,7 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         bearish_score += 10
         detected_rules.append("Overbought RSI Reversal")
 
-    # Final Calculation Based on Expiry Context
+    # Final Calculation
     if bullish_score >= bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
@@ -149,7 +159,6 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         accuracy = min(bearish_score, 98)
         css = "sell-bg"
 
-    # Dynamic Timer Prep Logic (Adapts according to selected trade seconds)
     prep_timer = 5 if trade_secs <= 15 else 10
 
     pattern_text = " | ".join(detected_rules) if detected_rules else "Price Momentum & Trend Flow"
@@ -202,4 +211,4 @@ if st.button("🚀 START ANALYZING MARKET"):
         st.error("⚠️ Live market data is loading. Select '1m Candle' or '5m Candle' and try again.")
 else:
     st.info("👆 Select Candle Time & Trade Time from Sidebar and click **START ANALYZING MARKET**.")
-             
+        
