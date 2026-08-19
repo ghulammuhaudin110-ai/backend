@@ -29,7 +29,7 @@ st.markdown("""
 st.markdown('<h1 class="gold-title">⚡ HK Signal Bot</h1>', unsafe_allow_html=True)
 st.subheader("Multi-Timeframe Signal Engine")
 
-# Sidebar - Dual Timeframe Configuration
+# Sidebar
 st.sidebar.header("⚙️ Trading Configuration")
 
 all_pairs = {
@@ -41,25 +41,21 @@ all_pairs = {
 
 selected_pair = st.sidebar.selectbox("🎯 Select Market Pair:", list(all_pairs.keys()))
 
-# 1. Separate Candle Time Option
 candle_time = st.sidebar.selectbox(
     "📊 Select Candle Time (Chart Time):", 
     ["5s Candle", "10s Candle", "15s Candle", "30s Candle", "1m Candle", "5m Candle", "1h Candle", "1w Candle"]
 )
 
-# 2. Separate Trade Expiry Time Option
 trade_time = st.sidebar.selectbox(
     "⏱️ Select Trade Time (Expiry):", 
     ["5s Trade", "10s Trade", "15s Trade", "30s Trade", "1m Trade", "5m Trade"]
 )
 
-# Timeframe Mapping for YFinance Data Retrieval
 candle_tf_map = {
     "5s Candle": "1m", "10s Candle": "1m", "15s Candle": "1m", "30s Candle": "1m",
     "1m Candle": "1m", "5m Candle": "5m", "1h Candle": "1h", "1w Candle": "1wk"
 }
 
-# Extraction of numerical seconds from Trade Option
 trade_sec_map = {
     "5s Trade": 5, "10s Trade": 10, "15s Trade": 15, "30s Trade": 30, "1m Trade": 60, "5m Trade": 300
 }
@@ -68,7 +64,7 @@ selected_trade_seconds = trade_sec_map[trade_time]
 
 st.write(f"Pair: **{selected_pair}** | Candle Time: **{candle_time}** | Trade Expiry: **{trade_time}**")
 
-# Strategy Engine Combining Both Settings
+# Fixed Candlestick Detection Engine
 def analyze_combined_market(symbol, candle_tf, trade_secs):
     df = yf.download(symbol, period="1d" if candle_tf != "1wk" else "1y", interval=candle_tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
@@ -92,63 +88,81 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
     close_p, open_p = float(c0['Close']), float(c0['Open'])
     high_p, low_p = float(c0['High']), float(c0['Low'])
 
+    c1_close, c1_open = float(c1['Close']), float(c1['Open'])
+
     body = abs(close_p - open_p)
     candle_range = high_p - low_p if (high_p - low_p) > 0 else 0.0001
     lower_wick = min(open_p, close_p) - low_p
     upper_wick = high_p - max(open_p, close_p)
 
-    support = float(df['Low'].tail(20).min())
-    resistance = float(df['High'].tail(20).max())
+    support = float(df['Low'].tail(15).min())
+    resistance = float(df['High'].tail(15).max())
 
     bullish_score = 50
     bearish_score = 50
     detected_rules = []
 
-    # Market Structure & Momentum Analysis
-    if float(c0['High']) > float(c1['High']) and float(c0['Low']) > float(c1['Low']):
-        bullish_score += 12
-        detected_rules.append("Higher Highs Structure 📈")
-    elif float(c0['High']) < float(c1['High']) and float(c0['Low']) < float(c1['Low']):
-        bearish_score += 12
-        detected_rules.append("Lower Lows Structure 📉")
+    # 1. Trend & Structure Analysis
+    is_uptrend = close_p > float(c0['SMA_20'])
+    is_downtrend = close_p < float(c0['SMA_20'])
 
-    if close_p > float(c0['SMA_20']):
+    if is_uptrend:
         bullish_score += 10
-    else:
+    elif is_downtrend:
         bearish_score += 10
 
-    if abs(close_p - support) <= (candle_range * 2):
+    # 2. Support & Resistance Conditions
+    near_support = abs(close_p - support) <= (candle_range * 1.5)
+    near_resistance = abs(close_p - resistance) <= (candle_range * 1.5)
+
+    if near_support:
         bullish_score += 15
-        detected_rules.append("Support Zone Bounce 🛡️")
-    if abs(close_p - resistance) <= (candle_range * 2):
+        detected_rules.append("At Strong Support Zone 🛡️")
+    if near_resistance:
         bearish_score += 15
-        detected_rules.append("Resistance Zone Touch 🚧")
+        detected_rules.append("At Strong Resistance Zone 🚧")
 
-    # Candlestick Patterns
-    if lower_wick >= (body * 1.5):
-        bullish_score += 18
-        detected_rules.append("Bullish Hammer Reversal 🔨")
-    elif upper_wick >= (body * 1.5):
-        bearish_score += 18
-        detected_rules.append("Shooting Star Reversal ☄️")
+    # 3. ACCURATE CANDLESTICK PATTERN LOGIC
 
-    if close_p > open_p and float(c1['Close']) < float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
-        bullish_score += 15
-        detected_rules.append("Bullish Engulfing Pattern 🔥")
-    elif close_p < open_p and float(c1['Close']) > float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
-        bearish_score += 15
-        detected_rules.append("Bearish Engulfing Pattern ❄️")
+    # A. Hammer vs Hanging Man (Lower Wick >= 2x Body)
+    if lower_wick >= (body * 2) and upper_wick <= (body * 0.5):
+        if is_downtrend or near_support:
+            bullish_score += 20
+            detected_rules.append("Valid Bullish Hammer (Bottom Reversal) 🔨")
+        elif is_uptrend or near_resistance:
+            bearish_score += 20
+            detected_rules.append("Valid Bearish Hanging Man (Top Reversal) 🪢")
 
+    # B. Shooting Star vs Inverted Hammer (Upper Wick >= 2x Body)
+    elif upper_wick >= (body * 2) and lower_wick <= (body * 0.5):
+        if is_uptrend or near_resistance:
+            bearish_score += 20
+            detected_rules.append("Valid Bearish Shooting Star ☄️")
+        elif is_downtrend or near_support:
+            bullish_score += 20
+            detected_rules.append("Valid Bullish Inverted Hammer 📐")
+
+    # C. Bullish Engulfing
+    if close_p > open_p and c1_close < c1_open and close_p > c1_open and open_p < c1_close:
+        bullish_score += 22
+        detected_rules.append("Confirmed Bullish Engulfing 🔥")
+
+    # D. Bearish Engulfing
+    elif close_p < open_p and c1_close > c1_open and close_p < c1_open and open_p > c1_close:
+        bearish_score += 22
+        detected_rules.append("Confirmed Bearish Engulfing ❄️")
+
+    # E. RSI Filter
     rsi_val = float(c0['RSI']) if not np.isnan(c0['RSI']) else 50.0
-    if rsi_val < 35:
-        bullish_score += 10
+    if rsi_val < 30:
+        bullish_score += 12
         detected_rules.append("Oversold RSI Reversal")
-    elif rsi_val > 65:
-        bearish_score += 10
+    elif rsi_val > 70:
+        bearish_score += 12
         detected_rules.append("Overbought RSI Reversal")
 
     # Final Calculation
-    if bullish_score >= bearish_score:
+    if bullish_score > bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
         accuracy = min(bullish_score, 98)
@@ -160,8 +174,7 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         css = "sell-bg"
 
     prep_timer = 5 if trade_secs <= 15 else 10
-
-    pattern_text = " | ".join(detected_rules) if detected_rules else "Price Momentum & Trend Flow"
+    pattern_text = " | ".join(detected_rules) if detected_rules else "Market Momentum Flow"
 
     return {
         "direction": direction, "arrow": arrow, "accuracy": accuracy, 
@@ -169,13 +182,13 @@ def analyze_combined_market(symbol, candle_tf, trade_secs):
         "rsi": rsi_val, "prep_timer": prep_timer
     }
 
-# Start Button Execution
+# Start Button
 if st.button("🚀 START ANALYZING MARKET"):
     radar_placeholder = st.empty()
     for stage in [
-        f"📡 Analyzing {candle_time} Chart Structure...",
-        f"⏳ Matching with {trade_time} Expiry Momentum...",
-        "🎯 Calculating Final Accuracy & Signal..."
+        f"📡 Analyzing {candle_time} Candlestick Rules...",
+        f"⏳ Verifying Support/Resistance & Trends...",
+        "🎯 Calculating Final Accurate Signal..."
     ]:
         radar_placeholder.info(stage)
         time.sleep(0.5)
@@ -208,7 +221,7 @@ if st.button("🚀 START ANALYZING MARKET"):
         timer_box.markdown(f'<div class="timer-display" style="color:#00E676; border-color:#00E676;">GO! PLACE {trade_time} TRADE NOW 🚀</div>', unsafe_allow_html=True)
         st.balloons()
     else:
-        st.error("⚠️ Live market data is loading. Select '1m Candle' or '5m Candle' and try again.")
+        st.error("⚠️ Live market data loading. Try selecting '1m Candle' or '5m Candle'.")
 else:
-    st.info("👆 Select Candle Time & Trade Time from Sidebar and click **START ANALYZING MARKET**.")
+    st.info("👆 Select options and click **START ANALYZING MARKET**.")
         
