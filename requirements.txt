@@ -1,5 +1,6 @@
-fastapi
-uvicorn
+streamlit
 pandas
 numpy
-pydantic
+yfinance
+ta
+
