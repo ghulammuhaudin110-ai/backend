@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import time
 
-st.set_page_config(page_title="Ultra Pro Price Action Engine", layout="wide")
+st.set_page_config(page_title="Ultra Pro Multi-Timeframe Engine", layout="wide")
 
 # Custom Styling
 st.markdown("""
@@ -17,9 +17,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Ultra Pro Price Action & Auto-Timer Engine")
+st.title("⚡ Ultra Pro Multi-Timeframe Signal Engine")
 
-# Sidebar - Settings
+# Sidebar - Dual Timeframe Configuration
 st.sidebar.header("⚙️ Trading Configuration")
 
 all_pairs = {
@@ -31,22 +31,36 @@ all_pairs = {
 
 selected_pair = st.sidebar.selectbox("🎯 Select Market Pair:", list(all_pairs.keys()))
 
-# Expiry Time Selection
-trade_timeframe = st.sidebar.selectbox(
-    "⏱️ Select Expiry / Timeframe:", 
-    ["5s Expiry", "10s Expiry", "15s Expiry", "30s Expiry", "1m Candle/Trade", "5m Candle/Trade", "10m Candle/Trade"]
+# 1. Separate Candle Time Option
+candle_time = st.sidebar.selectbox(
+    "📊 Select Candle Time (Chart Time):", 
+    ["5s Candle", "10s Candle", "15s Candle", "30s Candle", "1m Candle", "5m Candle", "1h Candle", "1w Candle"]
 )
 
-tf_map = {
-    "5s Expiry": "1m", "10s Expiry": "1m", "15s Expiry": "1m", "30s Expiry": "1m",
-    "1m Candle/Trade": "1m", "5m Candle/Trade": "5m", "10m Candle/Trade": "15m"
+# 2. Separate Trade Expiry Time Option
+trade_time = st.sidebar.selectbox(
+    "⏱️ Select Trade Time (Expiry):", 
+    ["5s Trade", "10s Trade", "15s Trade", "30s Trade", "1m Trade", "5m Trade"]
+)
+
+# Timeframe Mapping for YFinance Data Retrieval
+candle_tf_map = {
+    "5s Candle": "1m", "10s Candle": "1m", "15s Candle": "1m", "30s Candle": "1m",
+    "1m Candle": "1m", "5m Candle": "5m", "1h Candle": "1h", "1w Candle": "1wk"
 }
 
-st.write(f"Pair: **{selected_pair}** | Selected Setting: **{trade_timeframe}**")
+# Extraction of numerical seconds from Trade Option
+trade_sec_map = {
+    "5s Trade": 5, "10s Trade": 10, "15s Trade": 15, "30s Trade": 30, "1m Trade": 60, "5m Trade": 300
+}
 
-# Strategy Engine with Dynamic Fixed Accuracy Logic
-def analyze_advanced_market(symbol, tf):
-    df = yf.download(symbol, period="1d", interval=tf, progress=False)
+selected_trade_seconds = trade_sec_map[trade_time]
+
+st.write(f"Pair: **{selected_pair}** | Candle Time: **{candle_time}** | Trade Expiry: **{trade_time}**")
+
+# Strategy Engine Combining Both Settings
+def analyze_combined_market(symbol, candle_tf, trade_secs):
+    df = yf.download(symbol, period="1d" if candle_tf != "1wk" else "1y", interval=candle_tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
         
@@ -62,8 +76,8 @@ def analyze_advanced_market(symbol, tf):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    c0 = df.iloc[-1] # Current Candle
-    c1 = df.iloc[-2] # Previous Candle
+    c0 = df.iloc[-1]
+    c1 = df.iloc[-2]
 
     close_p, open_p = float(c0['Close']), float(c0['Open'])
     high_p, low_p = float(c0['High']), float(c0['Low'])
@@ -76,40 +90,37 @@ def analyze_advanced_market(symbol, tf):
     support = float(df['Low'].tail(20).min())
     resistance = float(df['High'].tail(20).max())
 
-    # BASE ACCURACY (Starts at 50%)
     bullish_score = 50
     bearish_score = 50
     detected_rules = []
 
-    # 1. Market Structure Analysis (HH, HL, LH, LL)
+    # Market Structure & Momentum Analysis
     if float(c0['High']) > float(c1['High']) and float(c0['Low']) > float(c1['Low']):
         bullish_score += 12
-        detected_rules.append("Higher Highs (Uptrend) 📈")
+        detected_rules.append("Higher Highs Structure 📈")
     elif float(c0['High']) < float(c1['High']) and float(c0['Low']) < float(c1['Low']):
         bearish_score += 12
-        detected_rules.append("Lower Lows (Downtrend) 📉")
+        detected_rules.append("Lower Lows Structure 📉")
 
-    # 2. Moving Average Trend
     if close_p > float(c0['SMA_20']):
         bullish_score += 10
     else:
         bearish_score += 10
 
-    # 3. Support & Resistance Bounce
     if abs(close_p - support) <= (candle_range * 2):
         bullish_score += 15
-        detected_rules.append("Support Level Touch 🛡️")
+        detected_rules.append("Support Zone Bounce 🛡️")
     if abs(close_p - resistance) <= (candle_range * 2):
         bearish_score += 15
-        detected_rules.append("Resistance Level Touch 🚧")
+        detected_rules.append("Resistance Zone Touch 🚧")
 
-    # 4. Candlestick Patterns Analysis
+    # Candlestick Patterns
     if lower_wick >= (body * 1.5):
         bullish_score += 18
-        detected_rules.append("Bullish Reversal Wick / Hammer 🔨")
+        detected_rules.append("Bullish Hammer Reversal 🔨")
     elif upper_wick >= (body * 1.5):
         bearish_score += 18
-        detected_rules.append("Bearish Reversal Wick / Shooting Star ☄️")
+        detected_rules.append("Shooting Star Reversal ☄️")
 
     if close_p > open_p and float(c1['Close']) < float(c1['Open']) and body > abs(float(c1['Close']) - float(c1['Open'])):
         bullish_score += 15
@@ -118,7 +129,6 @@ def analyze_advanced_market(symbol, tf):
         bearish_score += 15
         detected_rules.append("Bearish Engulfing Pattern ❄️")
 
-    # RSI Overbought/Oversold
     rsi_val = float(c0['RSI']) if not np.isnan(c0['RSI']) else 50.0
     if rsi_val < 35:
         bullish_score += 10
@@ -127,7 +137,7 @@ def analyze_advanced_market(symbol, tf):
         bearish_score += 10
         detected_rules.append("Overbought RSI Reversal")
 
-    # 5. Final Direction & Accuracy Calculation
+    # Final Calculation Based on Expiry Context
     if bullish_score >= bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
@@ -139,38 +149,37 @@ def analyze_advanced_market(symbol, tf):
         accuracy = min(bearish_score, 98)
         css = "sell-bg"
 
-    # Auto Entry Timer Logic Based on Accuracy
-    if accuracy >= 80:
-        auto_timer = 5 # High Accuracy -> Fast 5 Sec Entry
-    elif accuracy >= 65:
-        auto_timer = 10 # Medium Accuracy -> 10 Sec Prep
-    else:
-        auto_timer = 15 # Lower Accuracy -> 15 Sec Prep
+    # Dynamic Timer Prep Logic (Adapts according to selected trade seconds)
+    prep_timer = 5 if trade_secs <= 15 else 10
 
     pattern_text = " | ".join(detected_rules) if detected_rules else "Price Momentum & Trend Flow"
 
     return {
         "direction": direction, "arrow": arrow, "accuracy": accuracy, 
         "pattern": pattern_text, "css": css, "price": close_p, 
-        "rsi": rsi_val, "auto_timer": auto_timer
+        "rsi": rsi_val, "prep_timer": prep_timer
     }
 
-# Start Button
+# Start Button Execution
 if st.button("🚀 START ANALYZING MARKET"):
     radar_placeholder = st.empty()
-    for stage in ["📡 Scanning Live Market Pairs...", "🌀 Checking Support & Resistance Levels...", "🎯 Calculating Accuracy & Auto-Timer..."]:
+    for stage in [
+        f"📡 Analyzing {candle_time} Chart Structure...",
+        f"⏳ Matching with {trade_time} Expiry Momentum...",
+        "🎯 Calculating Final Accuracy & Signal..."
+    ]:
         radar_placeholder.info(stage)
         time.sleep(0.5)
     radar_placeholder.empty()
 
-    res = analyze_advanced_market(all_pairs[selected_pair], tf_map[trade_timeframe])
+    res = analyze_combined_market(all_pairs[selected_pair], candle_tf_map[candle_time], selected_trade_seconds)
 
     if res:
         st.markdown(f'''
             <div class="signal-card {res['css']}">
                 <h1>{res['direction']} {res['arrow']}</h1>
                 <h2>Accuracy / Confidence: {res['accuracy']}%</h2>
-                <h4>Detected Patterns & Rules: {res['pattern']}</h4>
+                <h4>Detected Rules: {res['pattern']}</h4>
             </div>
         ''', unsafe_allow_html=True)
 
@@ -179,18 +188,18 @@ if st.button("🚀 START ANALYZING MARKET"):
         c1.metric("Live Market Price", f"{res['price']:.5f}")
         c2.metric("RSI Value", f"{res['rsi']:.1f}")
 
-        # Auto Countdown Timer Execution
-        st.write(f"### ⏱️ Auto-Calculated Entry Timer ({res['auto_timer']} Sec Prep)")
+        # Live Countdown Preparation Timer
+        st.write(f"### ⏱️ Entry Preparation Countdown ({res['prep_timer']} Sec Prep)")
         timer_box = st.empty()
         
-        for sec in range(res['auto_timer'], 0, -1):
+        for sec in range(res['prep_timer'], 0, -1):
             timer_box.markdown(f'<div class="timer-display">{sec} Sec</div>', unsafe_allow_html=True)
             time.sleep(1)
             
-        timer_box.markdown('<div class="timer-display" style="color:#00E676; border-color:#00E676;">GO! PLACE TRADE NOW 🚀</div>', unsafe_allow_html=True)
+        timer_box.markdown(f'<div class="timer-display" style="color:#00E676; border-color:#00E676;">GO! PLACE {trade_time} TRADE NOW 🚀</div>', unsafe_allow_html=True)
         st.balloons()
     else:
-        st.error("⚠️ Live data loading. Please select 5m Candle/Trade and try again.")
+        st.error("⚠️ Live market data is loading. Select '1m Candle' or '5m Candle' and try again.")
 else:
-    st.info("👆 Click the **START ANALYZING MARKET** button to scan live market patterns.")
-        
+    st.info("👆 Select Candle Time & Trade Time from Sidebar and click **START ANALYZING MARKET**.")
+             
