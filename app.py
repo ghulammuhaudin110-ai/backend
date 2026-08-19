@@ -1,5 +1,4 @@
-
-    import streamlit as st
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -46,7 +45,7 @@ entry_timer_secs = st.sidebar.slider("⏳ Choose Entry Timer (Seconds):", min_va
 
 st.write(f"Selected Pair: **{selected_pair}** | Timeframe: **{trade_timeframe}**")
 
-# Strategy Logic (Trend + Support/Resistance + Candlestick Patterns)
+# Strategy Logic
 def analyze_market(symbol, tf):
     df = yf.download(symbol, period="1d", interval=tf, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
@@ -55,10 +54,8 @@ def analyze_market(symbol, tf):
     if df.empty or len(df) < 15:
         return None
 
-    # Technical Indicators
     df['SMA_20'] = df['Close'].rolling(window=15).mean()
     
-    # RSI
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -76,7 +73,6 @@ def analyze_market(symbol, tf):
     rsi_val = float(last['RSI']) if not np.isnan(last['RSI']) else 50.0
     sma_val = float(last['SMA_20']) if not np.isnan(last['SMA_20']) else close_p
 
-    # Price Action Specs
     body = abs(close_p - open_p)
     candle_range = high_p - low_p
     lower_wick = min(open_p, close_p) - low_p
@@ -85,12 +81,10 @@ def analyze_market(symbol, tf):
     support = float(df['Low'].tail(20).min())
     resistance = float(df['High'].tail(20).max())
 
-    # Base Logic
     bullish_score = 0
     bearish_score = 0
     detected_patterns = []
 
-    # Trend Analysis
     if close_p > sma_val:
         bullish_score += 25
         trend = "UPTREND 📈"
@@ -98,7 +92,6 @@ def analyze_market(symbol, tf):
         bearish_score += 25
         trend = "DOWNTREND 📉"
 
-    # Support / Resistance Analysis
     if abs(close_p - support) < (candle_range * 1.5):
         bullish_score += 25
         detected_patterns.append("Near Support Level 🛡️")
@@ -106,7 +99,6 @@ def analyze_market(symbol, tf):
         bearish_score += 25
         detected_patterns.append("Near Resistance Level 🚧")
 
-    # Candlestick Patterns
     if lower_wick > (body * 1.8) and candle_range > 0:
         bullish_score += 30
         detected_patterns.append("Bullish Hammer 🔨")
@@ -121,7 +113,6 @@ def analyze_market(symbol, tf):
         bearish_score += 25
         detected_patterns.append("Bearish Engulfing ❄️")
 
-    # RSI Adjustments
     if rsi_val < 35:
         bullish_score += 20
         detected_patterns.append("Oversold RSI")
@@ -129,7 +120,6 @@ def analyze_market(symbol, tf):
         bearish_score += 20
         detected_patterns.append("Overbought RSI")
 
-    # Determine Final Direction and Accuracy
     if bullish_score >= bearish_score:
         direction = "CALL (BUY) 🟢 UP"
         arrow = "⬆️"
@@ -141,7 +131,7 @@ def analyze_market(symbol, tf):
         accuracy = min(bearish_score, 98)
         css = "sell-bg"
 
-    if accuracy < 10: accuracy = 15 # Minimum fallback accuracy display
+    if accuracy < 10: accuracy = 15
 
     pattern_text = ", ".join(detected_patterns) if detected_patterns else "Price Action & Trend Flow"
 
@@ -153,7 +143,6 @@ def analyze_market(symbol, tf):
 
 # Start Button
 if st.button("🚀 START ANALYZING MARKET"):
-    # Radar Loading Animation
     radar_placeholder = st.empty()
     for stage in ["📡 Radar Scanning Live Market Pairs...", "🌀 Analyzing Support & Resistance Levels...", "🔍 Detecting Price Action Patterns..."]:
         radar_placeholder.info(stage)
@@ -163,7 +152,6 @@ if st.button("🚀 START ANALYZING MARKET"):
     res = analyze_market(all_pairs[selected_pair], tf_map[trade_timeframe])
 
     if res:
-        # Display Signal Card
         st.markdown(f'''
             <div class="signal-card {res['css']}">
                 <h1>{res['direction']} {res['arrow']}</h1>
@@ -173,14 +161,12 @@ if st.button("🚀 START ANALYZING MARKET"):
         ''', unsafe_allow_html=True)
 
         st.write("---")
-        # Display Deep Market Data
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Live Market Price", f"{res['price']:.5f}")
         c2.metric("Market Trend", res['trend'])
         c3.metric("Support / Resistance", f"{res['support']:.5f} / {res['resistance']:.5f}")
         c4.metric("RSI Value", f"{res['rsi']:.1f}")
 
-        # Live Entry Timer
         st.write("### ⏱️ Live Entry Countdown Timer")
         timer_box = st.empty()
         
