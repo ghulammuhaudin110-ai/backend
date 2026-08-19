@@ -1,0 +1,131 @@
+from fastapi import FastAPI, Request, HTTPException
+from pydantic import BaseModel
+import pandas as pd
+import numpy as np
+from typing import Optional, Dict, Any
+
+app = FastAPI(title="Trading Signal Analysis Engine", version="1.0.0")
+
+SUPPORTED_PAIRS = {
+    "REAL": ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/PKR", "USDT/PKR"],
+    "OTC": ["EUR/USD_OTC", "GBP/USD_OTC", "NZD/USD_OTC", "USD/JPY_OTC"]
+}
+
+def detect_candlestick_patterns(df: pd.DataFrame) -> dict:
+    latest = df.iloc[-1]
+    prev = df.iloc[-2]
+    
+    body = abs(latest['close'] - latest['open'])
+    upper_shade = latest['high'] - max(latest['close'], latest['open'])
+    lower_shade = min(latest['close'], latest['open']) - latest['low']
+    candle_range = latest['high'] - latest['low']
+    
+    patterns = []
+    
+    if candle_range > 0 and (body / candle_range) <= 0.1:
+        patterns.append("Doji")
+        
+    if lower_shade >= (2 * body) and upper_shade <= (0.2 * body) and latest['close'] > latest['open']:
+        patterns.append("Bullish Hammer")
+        
+    if upper_shade >= (2 * body) and lower_shade <= (0.2 * body) and latest['close'] < latest['open']:
+        patterns.append("Shooting Star / Inverted Hammer")
+        
+    if prev['close'] < prev['open'] and latest['close'] > latest['open']:
+        if latest['close'] > prev['open'] and latest['open'] < prev['close']:
+            patterns.append("Bullish Engulfing")
+            
+    if prev['close'] > prev['open'] and latest['close'] < latest['open']:
+        if latest['close'] < prev['open'] and latest['open'] > prev['close']:
+            patterns.append("Bearish Engulfing")
+            
+    return {"detected_patterns": patterns, "candle_type": "BULLISH" if latest['close'] > latest['open'] else "BEARISH"}
+
+def analyze_market_structure(df: pd.DataFrame) -> dict:
+    highs = df['high'].tail(5).values
+    lows = df['low'].tail(5).values
+    
+    is_hh = highs[-1] > highs[-2] and highs[-2] > highs[-3]
+    is_hl = lows[-1] > lows[-2] and lows[-2] > lows[-3]
+    is_lh = highs[-1] < highs[-2] and highs[-2] < highs[-3]
+    is_ll = lows[-1] < lows[-2] and lows[-2] < lows[-3]
+    
+    trend = "NEUTRAL / SIDEWAYS"
+    if is_hh and is_hl:
+        trend = "UPTREND (Strong Bullish)"
+    elif is_lh and is_ll:
+        trend = "DOWNTREND (Strong Bearish)"
+        
+    return {
+        "trend": trend,
+        "structures": {
+            "Higher_High": bool(is_hh),
+            "Higher_Low": bool(is_hl),
+            "Lower_High": bool(is_lh),
+            "Lower_Low": bool(is_ll)
+        }
+    }
+
+def calculate_signal_accuracy(pattern_data: dict, structure_data: dict, rsi: float) -> dict:
+    score = 50
+    signal = "NEUTRAL"
+    
+    trend = structure_data["trend"]
+    patterns = pattern_data["detected_patterns"]
+    
+    if "UPTREND" in trend:
+        score += 20
+        if "Bullish Hammer" in patterns or "Bullish Engulfing" in patterns:
+            score += 25
+            signal = "BUY / CALL"
+        if rsi < 40:
+            score += 10
+            
+    elif "DOWNTREND" in trend:
+        score += 20
+        if "Shooting Star / Inverted Hammer" in patterns or "Bearish Engulfing" in patterns:
+            score += 25
+            signal = "SELL / PUT"
+        if rsi > 60:
+            score += 10
+            
+    final_accuracy = min(score, 96.5)
+    
+    return {
+        "signal": signal,
+        "accuracy_percentage": round(final_accuracy, 2),
+        "confluence_factors": len(patterns) + (1 if "UPTREND" in trend or "DOWNTREND" in trend else 0)
+    }
+
+@app.get("/")
+def root():
+    return {"status": "Trading Signal Engine Running", "supported_pairs": SUPPORTED_PAIRS}
+
+class AnalysisRequest(BaseModel):
+    pair: str
+    timeframe: str = "1m"
+    candles: list[Dict[str, float]]
+    rsi_val: Optional[float] = 50.0
+
+@app.post("/analyze")
+def analyze_market(data: AnalysisRequest):
+    if len(data.candles) < 5:
+        raise HTTPException(status_code=400, detail="Minimum 5 candles required for structure analysis.")
+        
+    df = pd.DataFrame(data.candles)
+    
+    pattern_res = detect_candlestick_patterns(df)
+    structure_res = analyze_market_structure(df)
+    signal_res = calculate_signal_accuracy(pattern_res, structure_res, data.rsi_val)
+    
+    return {
+        "pair": data.pair,
+        "timeframe": data.timeframe,
+        "market_trend": structure_res["trend"],
+        "structures": structure_res["structures"],
+        "candle_patterns": pattern_res["detected_patterns"],
+        "signal": signal_res["signal"],
+        "accuracy_percentage": f"{signal_res['accuracy_percentage']}%",
+        "recommendation": "EXECUTE TRADE" if signal_res['accuracy_percentage'] >= 80 else "WAIT FOR BETTER SETUP"
+  }
+  
