@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="HK SIGNAL BOT", page_icon="🪙", layout="centered"
 )
 
-# Custom CSS for Golden Header Board & Styling
+# Custom Styling
 st.markdown(
     """
     <style>
@@ -21,7 +21,7 @@ st.markdown(
         border-radius: 12px;
         text-align: center;
         box-shadow: 0px 4px 15px rgba(212, 175, 55, 0.4);
-        margin-bottom: 10px;
+        margin-bottom: 15px;
     }
     .golden-title {
         color: #111827;
@@ -29,7 +29,6 @@ st.markdown(
         font-weight: 900;
         margin: 0;
         letter-spacing: 2px;
-        text-shadow: 1px 1px 2px rgba(255,255,255,0.6);
     }
     .sub-status {
         color: #1f2937;
@@ -45,10 +44,25 @@ st.markdown(
         padding: 12px;
         border: none;
     }
+    @keyframes flyUp {
+        0% { transform: translateY(50px) scale(0.6); opacity: 0; }
+        50% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+        100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+    }
+    .airplane-animated {
+        font-size: 60px;
+        text-align: center;
+        animation: flyUp 1.5s ease-in-out infinite;
+        margin: 10px 0;
+    }
     </style>
 """,
     unsafe_allow_html=True,
 )
+
+# Session State for Radar
+if "signal_direction" not in st.session_state:
+    st.session_state.signal_direction = "IDLE"
 
 # ----------------- 1. GOLDEN HK SIGNAL BOT BOARD -----------------
 st.markdown(
@@ -61,28 +75,41 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ----------------- 2. COIN-SIZED GOLDEN RADAR -----------------
-st.markdown(
-    """
-    <div style="text-align: center; margin: 15px 0;">
-        <svg width="70" height="70" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="#111827" stroke="url(#goldGradient)" stroke-width="4" />
-            <circle cx="50" cy="50" r="28" fill="none" stroke="#d4af37" stroke-width="1.5" stroke-dasharray="3 3" />
-            <circle cx="50" cy="50" r="14" fill="none" stroke="#d4af37" stroke-width="1" />
-            <circle cx="50" cy="50" r="4" fill="#facc15" />
-            <line x1="50" y1="50" x2="80" y2="20" stroke="#facc15" stroke-width="2">
-                <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="2s" repeatCount="indefinite"/>
+
+# ----------------- 2. DYNAMIC RADAR FUNCTION -----------------
+def render_radar(is_running=False, direction="IDLE"):
+    stroke_color = "#d4af37"
+    arrow = ""
+    dur = "2s" if is_running else "0s"
+
+    if direction == "CALL":
+        stroke_color = "#22c55e"  # Green
+        arrow = '<polygon points="50,30 35,60 65,60" fill="#22c55e" />'
+    elif direction == "PUT":
+        stroke_color = "#ef4444"  # Red
+        arrow = '<polygon points="50,70 35,40 65,40" fill="#ef4444" />'
+    else:
+        arrow = '<circle cx="50" cy="50" r="6" fill="#facc15" />'
+
+    radar_html = f"""
+    <div style="text-align: center; margin: 10px 0;">
+        <svg width="80" height="80" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="#111827" stroke="{stroke_color}" stroke-width="4" />
+            <circle cx="50" cy="50" r="28" fill="none" stroke="{stroke_color}" stroke-width="1.5" stroke-dasharray="3 3" />
+            <circle cx="50" cy="50" r="14" fill="none" stroke="{stroke_color}" stroke-width="1" />
+            {arrow}
+            <line x1="50" y1="50" x2="80" y2="20" stroke="{stroke_color}" stroke-width="2">
+                <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="{dur}" repeatCount="indefinite"/>
             </line>
-            <defs>
-                <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#bf953f" />
-                    <stop offset="50%" stop-color="#fcf6ba" />
-                    <stop offset="100%" stop-color="#aa771c" />
-                </linearGradient>
-            </defs>
         </svg>
     </div>
-""",
+    """
+    return radar_html
+
+
+radar_placeholder = st.empty()
+radar_placeholder.markdown(
+    render_radar(False, st.session_state.signal_direction),
     unsafe_allow_html=True,
 )
 
@@ -118,7 +145,7 @@ with col3:
     )
 
 
-# ----------------- TECHNICAL INDICATORS -----------------
+# ----------------- TECHNICAL ANALYSIS ENGINE -----------------
 def calculate_technical_indicators(df):
     close = df["Close"].values
     high = df["High"].values
@@ -250,13 +277,27 @@ def analyze_live_market(symbol, interval_str):
 # ----------------- START ANALYZING BUTTON -----------------
 st.markdown("---")
 if st.button("⚡ START ANALYZING", use_container_width=True):
-    # Analyzing Animation
-    with st.spinner("Connecting to Live TradingView Market Data..."):
-        time.sleep(1.2)
+    # 1. Start Radar Rotation Animation
+    radar_placeholder.markdown(
+        render_radar(is_running=True, direction="IDLE"), unsafe_allow_html=True
+    )
+
+    with st.spinner("Analyzing Live Market Technicals..."):
+        time.sleep(1.5)
         symbol = forex_map[selected_pair]
         direction, strategy, score = analyze_live_market(symbol, candle_time)
 
-    st.subheader("📊 Signal Decision")
+    # 2. Stop Radar and Update Arrow Direction
+    dir_key = (
+        "CALL" if "CALL" in direction else ("PUT" if "PUT" in direction else "IDLE")
+    )
+    st.session_state.signal_direction = dir_key
+    radar_placeholder.markdown(
+        render_radar(is_running=False, direction=dir_key),
+        unsafe_allow_html=True,
+    )
+
+    st.subheader("📊 Signal Result")
 
     if "CALL" in direction:
         st.success(f"**SIGNAL:** {selected_pair} ➔ {direction}")
@@ -271,12 +312,12 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
     with m1:
         st.metric(label="Accuracy Match Score", value=f"{score}%")
     with m2:
-        st.metric(label="Trade Duration", value=trade_time)
+        st.metric(label="Trade Expiry", value=trade_time)
 
-    # Dynamic Countdown Logic based on Accuracy
-    if score >= 75:
+    # Calculate Entry Seconds based on Accuracy Score
+    if score >= 80:
         countdown_sec = 5
-    elif score >= 50:
+    elif score >= 60:
         countdown_sec = 8
     else:
         countdown_sec = 10
@@ -286,14 +327,47 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
 
     countdown_placeholder = st.empty()
 
-    # Live Countdown Timer Loop
+    # 3. CIRCULAR GREEN RADAR COUNTDOWN (تھپّا / دائرہ)
     for sec in range(countdown_sec, 0, -1):
-        countdown_placeholder.warning(
-            f"⚠️ **PREPARE ENTRY IN:** **{sec}** Seconds..."
+        green_circle_timer = f"""
+        <div style="text-align: center; margin: 15px 0;">
+            <div style="
+                display: inline-flex;
+                justify-content: center;
+                align-items: center;
+                width: 90px;
+                height: 90px;
+                border-radius: 50%;
+                background: #0f291e;
+                border: 4px solid #22c55e;
+                box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
+            ">
+                <span style="color: #22c55e; font-size: 32px; font-weight: bold;">{sec}s</span>
+            </div>
+            <p style="color: #facc15; font-weight: bold; margin-top: 8px;">PREPARE ENTRY NOW...</p>
+        </div>
+        """
+        countdown_placeholder.markdown(
+            green_circle_timer, unsafe_allow_html=True
         )
         time.sleep(1)
 
-    countdown_placeholder.success(
-        f"🚀 **GO! PLACE YOUR {direction} TRADE NOW!**"
-    )
+    # 4. AIRPLANE LAUNCH ANIMATION ON "GO"
+    airplane_go_html = f"""
+    <div style="text-align: center; margin: 15px 0;">
+        <div class="airplane-animated">🚀✈️</div>
+        <div style="
+            background: #22c55e; 
+            color: white; 
+            padding: 12px; 
+            border-radius: 8px; 
+            font-size: 18px; 
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.4);
+        ">
+            GO! PLACE YOUR {direction} TRADE NOW!
+        </div>
+    </div>
+    """
+    countdown_placeholder.markdown(airplane_go_html, unsafe_allow_html=True)
     
