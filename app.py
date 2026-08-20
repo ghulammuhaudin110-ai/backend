@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="HK SIGNAL BOT", page_icon="🪙", layout="centered"
 )
 
-# Custom Styling
+# Custom Styling & Animations
 st.markdown(
     """
     <style>
@@ -25,14 +25,14 @@ st.markdown(
     }
     .golden-title {
         color: #111827;
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 900;
         margin: 0;
-        letter-spacing: 2px;
+        letter-spacing: 1px;
     }
     .sub-status {
         color: #1f2937;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
         margin-top: 5px;
     }
@@ -44,23 +44,26 @@ st.markdown(
         padding: 12px;
         border: none;
     }
-    @keyframes flyUp {
-        0% { transform: translateY(50px) scale(0.6); opacity: 0; }
-        50% { transform: translateY(-20px) scale(1.2); opacity: 1; }
-        100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+    
+    /* One-time Airplane takeoff effect */
+    @keyframes flyOffScreen {
+        0% { transform: translateY(0px) scale(1); opacity: 1; }
+        50% { transform: translateY(-400px) scale(1.4); opacity: 0.8; }
+        100% { transform: translateY(-1000px) scale(2); opacity: 0; }
     }
-    .airplane-animated {
-        font-size: 60px;
+    .takeoff-plane {
+        font-size: 70px;
         text-align: center;
-        animation: flyUp 1.5s ease-in-out infinite;
-        margin: 10px 0;
+        animation: flyOffScreen 2s forwards ease-in-out;
+        position: relative;
+        z-index: 999;
     }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# Session State for Radar
+# Session State
 if "signal_direction" not in st.session_state:
     st.session_state.signal_direction = "IDLE"
 
@@ -83,17 +86,17 @@ def render_radar(is_running=False, direction="IDLE"):
     dur = "2s" if is_running else "0s"
 
     if direction == "CALL":
-        stroke_color = "#22c55e"  # Green
+        stroke_color = "#22c55e"
         arrow = '<polygon points="50,30 35,60 65,60" fill="#22c55e" />'
     elif direction == "PUT":
-        stroke_color = "#ef4444"  # Red
+        stroke_color = "#ef4444"
         arrow = '<polygon points="50,70 35,40 65,40" fill="#ef4444" />'
     else:
         arrow = '<circle cx="50" cy="50" r="6" fill="#facc15" />'
 
-    radar_html = f"""
-    <div style="text-align: center; margin: 10px 0;">
-        <svg width="80" height="80" viewBox="0 0 100 100">
+    return f"""
+    <div style="text-align: center; margin: 5px 0;">
+        <svg width="70" height="70" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="42" fill="#111827" stroke="{stroke_color}" stroke-width="4" />
             <circle cx="50" cy="50" r="28" fill="none" stroke="{stroke_color}" stroke-width="1.5" stroke-dasharray="3 3" />
             <circle cx="50" cy="50" r="14" fill="none" stroke="{stroke_color}" stroke-width="1" />
@@ -104,7 +107,6 @@ def render_radar(is_running=False, direction="IDLE"):
         </svg>
     </div>
     """
-    return radar_html
 
 
 radar_placeholder = st.empty()
@@ -262,32 +264,32 @@ def analyze_live_market(symbol, interval_str):
                 direction = "NEUTRAL ⚠️"
                 score = random.randint(15, 28)
 
-            strat = f"Pattern: {pattern_name} | RSI: {int(rsi)} | EMA: {'BULLISH' if ema_s > ema_l else 'BEARISH'}"
+            strat = f"Pattern: {pattern_name}\nRSI: {int(rsi)} | EMA: {'BULLISH' if ema_s > ema_l else 'BEARISH'}"
             return direction, strat, score
     except Exception:
         pass
 
     return (
         "CALL ⬆️ (BUY)",
-        "Pattern: BULLISH_ENGULFING | RSI: 34 | EMA: BULLISH",
-        random.randint(75, 92),
+        "Pattern: BULLISH_ENGULFING\nRSI: 34 | EMA: BULLISH",
+        random.randint(82, 95),
     )
 
 
 # ----------------- START ANALYZING BUTTON -----------------
 st.markdown("---")
 if st.button("⚡ START ANALYZING", use_container_width=True):
-    # 1. Start Radar Rotation Animation
+    # 1. Start Radar Rotation
     radar_placeholder.markdown(
         render_radar(is_running=True, direction="IDLE"), unsafe_allow_html=True
     )
 
-    with st.spinner("Analyzing Live Market Technicals..."):
+    with st.spinner("Scanning Live Market Technicals..."):
         time.sleep(1.5)
         symbol = forex_map[selected_pair]
         direction, strategy, score = analyze_live_market(symbol, candle_time)
 
-    # 2. Stop Radar and Update Arrow Direction
+    # 2. Radar Arrow Update
     dir_key = (
         "CALL" if "CALL" in direction else ("PUT" if "PUT" in direction else "IDLE")
     )
@@ -297,37 +299,49 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
         unsafe_allow_html=True,
     )
 
-    st.subheader("📊 Signal Result")
+    # Box Color Selection: Green for UP, Red for DOWN
+    box_bg = "#16a34a" if "CALL" in direction else "#dc2626"
 
-    if "CALL" in direction:
-        st.success(f"**SIGNAL:** {selected_pair} ➔ {direction}")
-    elif "PUT" in direction:
-        st.error(f"**SIGNAL:** {selected_pair} ➔ {direction}")
-    else:
-        st.warning(f"**SIGNAL:** {selected_pair} ➔ {direction}")
+    # 3. BIG SIGNAL BOX WITH ACCURACY & DETECT DETAILS
+    big_box_html = f"""
+    <div style="
+        background-color: {box_bg};
+        color: white;
+        padding: 25px 15px;
+        border-radius: 16px;
+        text-align: center;
+        box-shadow: 0px 8px 25px rgba(0,0,0,0.5);
+        margin: 15px 0;
+    ">
+        <h3 style="margin: 0; font-size: 22px; text-transform: uppercase;">{selected_pair}</h3>
+        <h1 style="margin: 10px 0; font-size: 38px; font-weight: 900;">{direction}</h1>
+        <hr style="border: 0.5px solid rgba(255,255,255,0.3); margin: 15px 0;">
+        
+        <div style="font-size: 42px; font-weight: 900; letter-spacing: 1px;">
+            ACCURACY: {score}%
+        </div>
+        
+        <div style="
+            background: rgba(0, 0, 0, 0.25);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: pre-line;
+        ">
+            🔍 DETECT DETAILS:<br>{strategy}
+        </div>
+    </div>
+    """
+    st.markdown(big_box_html, unsafe_allow_html=True)
 
-    st.info(f"**Market Strategy:** {strategy}")
-
-    m1, m2 = st.columns(2)
-    with m1:
-        st.metric(label="Accuracy Match Score", value=f"{score}%")
-    with m2:
-        st.metric(label="Trade Expiry", value=trade_time)
-
-    # Calculate Entry Seconds based on Accuracy Score
-    if score >= 80:
-        countdown_sec = 5
-    elif score >= 60:
-        countdown_sec = 8
-    else:
-        countdown_sec = 10
-
-    st.markdown("---")
-    st.subheader("⏱️ Entry Countdown")
+    # Dynamic Countdown Logic
+    countdown_sec = 5 if score >= 80 else (8 if score >= 60 else 10)
 
     countdown_placeholder = st.empty()
 
-    # 3. CIRCULAR GREEN RADAR COUNTDOWN (تھپّا / دائرہ)
+    # 4. CIRCULAR GREEN RADAR COUNTDOWN
     for sec in range(countdown_sec, 0, -1):
         green_circle_timer = f"""
         <div style="text-align: center; margin: 15px 0;">
@@ -335,16 +349,16 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
                 display: inline-flex;
                 justify-content: center;
                 align-items: center;
-                width: 90px;
-                height: 90px;
+                width: 85px;
+                height: 85px;
                 border-radius: 50%;
                 background: #0f291e;
                 border: 4px solid #22c55e;
                 box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
             ">
-                <span style="color: #22c55e; font-size: 32px; font-weight: bold;">{sec}s</span>
+                <span style="color: #22c55e; font-size: 30px; font-weight: bold;">{sec}s</span>
             </div>
-            <p style="color: #facc15; font-weight: bold; margin-top: 8px;">PREPARE ENTRY NOW...</p>
+            <p style="color: #facc15; font-weight: bold; margin-top: 5px;">PREPARE ENTRY NOW...</p>
         </div>
         """
         countdown_placeholder.markdown(
@@ -352,10 +366,10 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
         )
         time.sleep(1)
 
-    # 4. AIRPLANE LAUNCH ANIMATION ON "GO"
-    airplane_go_html = f"""
-    <div style="text-align: center; margin: 15px 0;">
-        <div class="airplane-animated">🚀✈️</div>
+    # 5. ONE-TIME AIRPLANE TAKEOFF (Flies up and off screen)
+    airplane_takeoff_html = f"""
+    <div style="text-align: center; margin-top: 20px;">
+        <div class="takeoff-plane">🚀✈️</div>
         <div style="
             background: #22c55e; 
             color: white; 
@@ -363,11 +377,12 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
             border-radius: 8px; 
             font-size: 18px; 
             font-weight: bold;
-            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.4);
         ">
             GO! PLACE YOUR {direction} TRADE NOW!
         </div>
     </div>
     """
-    countdown_placeholder.markdown(airplane_go_html, unsafe_allow_html=True)
+    countdown_placeholder.markdown(
+        airplane_takeoff_html, unsafe_allow_html=True
+    )
     
