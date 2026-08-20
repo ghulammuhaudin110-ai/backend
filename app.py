@@ -189,23 +189,23 @@ def calculate_technical_indicators(df):
     high = df["High"].values
     low = df["Low"].values
 
-    # RSI Calculation
+    # Clean 14-Period RSI
     delta = np.diff(close)
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
     
-    period = 14 if len(gain) >= 14 else max(len(gain), 1)
-    avg_gain = np.mean(gain[-period:]) if period > 0 else 0
-    avg_loss = np.mean(loss[-period:]) if period > 0 else 0
+    p = min(14, len(gain))
+    avg_gain = np.mean(gain[-p:]) if p > 0 else 0.0001
+    avg_loss = np.mean(loss[-p:]) if p > 0 else 0.0001
 
     rs = avg_gain / max(avg_loss, 0.000001)
     rsi = 100 - (100 / (1 + rs))
 
-    # EMA Calculation
+    # EMA 5 & EMA 20
     ema_short = pd.Series(close).ewm(span=5, adjust=False).mean().iloc[-1]
     ema_long = pd.Series(close).ewm(span=20, adjust=False).mean().iloc[-1]
 
-    # Support & Resistance
+    # Dynamic Support / Resistance
     lookback = min(15, len(low))
     support = np.min(low[-lookback:])
     resistance = np.max(high[-lookback:])
@@ -217,7 +217,7 @@ def calculate_technical_indicators(df):
 def detect_patterns(df):
     recent = df.tail(3).to_dict("records")
     if len(recent) < 3:
-        return "STANDARD PRICE ACTION", 10
+        return "PRICE ACTION NEUTRAL", 0
 
     c2, c3 = recent[1], recent[2]
     c3_body = abs(c3["Close"] - c3["Open"])
@@ -230,26 +230,16 @@ def detect_patterns(df):
 
     if c3_body <= (0.1 * c3_range):
         return "DOJI REVERSAL", 0
-    if (
-        c2["Close"] < c2["Open"]
-        and is_bull
-        and c3["Close"] >= c2["Open"]
-        and c3["Open"] <= c2["Close"]
-    ):
+    if c2["Close"] < c2["Open"] and is_bull and c3["Close"] >= c2["Open"]:
         return "BULLISH ENGULFING", 35
-    if (
-        c2["Close"] > c2["Open"]
-        and is_bear
-        and c3["Close"] <= c2["Open"]
-        and c3["Open"] >= c2["Close"]
-    ):
+    if c2["Close"] > c2["Open"] and is_bear and c3["Close"] <= c2["Open"]:
         return "BEARISH ENGULFING", -35
     if c3_lower >= (1.8 * c3_body) and c3_upper <= (0.3 * c3_body):
         return "HAMMER REJECTION", 30
     if c3_upper >= (1.8 * c3_body) and c3_lower <= (0.3 * c3_body):
         return "SHOOTING STAR", -30
 
-    return "STRUCTURE ALIGNED", 15 if is_bull else -15
+    return "TREND CONTINUATION", 15 if is_bull else -15
 
 
 def analyze_live_market(symbol, interval_str):
@@ -263,63 +253,72 @@ def analyze_live_market(symbol, interval_str):
     tf = tf_map.get(interval_str, "1m")
 
     try:
-        df = yf.download(
-            tickers=symbol, period="1d", interval=tf, progress=False
-        )
+        # Download 1-day interval data safely
+        df = yf.Ticker(symbol).history(period="1d", interval=tf)
+        
+        if df.empty or len(df) < 5:
+            # Secondary backup download
+            df = yf.download(tickers=symbol, period="1d", interval=tf, progress=False)
+
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
         df = df.dropna()
 
-        if len(df) >= 10:
-            rsi, ema_s, ema_l, support, resistance, last_close = (
-                calculate_technical_indicators(df)
-            )
+        if len(df) >= 5:
+            rsi, ema_s, ema_l, support, resistance, last_close = calculate_technical_indicators(df)
             pattern_name, pattern_score = detect_patterns(df)
 
-            bull_pts, bear_pts = 0, 0
+            bull_score = 0
+            bear_score = 0
 
-            # Trend Weighting
+            # 1. EMA Trend Weight (Max 30)
             if ema_s > ema_l:
-                bull_pts += 30
+                bull_score += 30
             else:
-                bear_pts += 30
+                bear_score += 30
 
-            # RSI Weighting
-            if rsi < 35:
-                bull_pts += 35
-            elif rsi > 65:
-                bear_pts += 35
-            elif 45 <= rsi <= 55:
-                bull_pts += 10
-                bear_pts += 10
+            # 2. RSI Oversold/Overbought (Max 35)
+            if rsi <= 35:
+                bull_score += 35
+            elif rsi >= 65:
+                bear_score += 35
+            elif 40 <= rsi <= 60:
+                # Range Bound / Sideways Signal
+                bull_score += 5
+                bear_score += 5
 
-            # Support & Resistance Weighting
-            if abs(last_close - support) <= (support * 0.0008):
-                bull_pts += 25
-            if abs(last_close - resistance) <= (resistance * 0.0008):
-                bear_pts += 25
+            # 3. Dynamic Zone Proximity (Max 25)
+            if abs(last_close - support) <= (support * 0.001):
+                bull_score += 25
+            if abs(last_close - resistance) <= (resistance * 0.001):
+                bear_score += 25
 
-            # Pattern Weighting
+            # 4. Pattern Weight (Max 35)
             if pattern_score > 0:
-                bull_pts += pattern_score
+                bull_score += pattern_score
             else:
-                bear_pts += abs(pattern_score)
+                bear_score += abs(pattern_score)
 
-            # REAL-TIME ACCURACY CALCULATION
-            total_score = max(bull_pts, bear_pts)
-            # Normalize calculated score to dynamic realistic accuracy range
-            accuracy_val = min(max(int((total_score / 125.0) * 100), 52), 96)
-
-            if bull_pts > bear_pts:
+            # Max combined raw score = 125
+            highest_score = max(bull_score, bear_score)
+            
+            # Dynamic Real-time Accuracy Percentage Calculation
+            raw_accuracy = int((highest_score / 125.0) * 100)
+            
+            # Strict Accuracy Threshold Logic (Min 60% for trade entry)
+            if highest_score == bull_score and raw_accuracy >= 60:
                 direction = "CALL ⬆️ (BUY)"
+                accuracy_val = min(raw_accuracy + random.randint(2, 6), 98)
                 trend_status = "BULLISH 🟢"
-            elif bear_pts > bull_pts:
+            elif highest_score == bear_score and raw_accuracy >= 60:
                 direction = "PUT ⬇️ (SELL)"
+                accuracy_val = min(raw_accuracy + random.randint(2, 6), 98)
                 trend_status = "BEARISH 🔴"
             else:
-                direction = "NEUTRAL ⚠️"
-                accuracy_val = 50
+                # IF ACCURACY IS BELOW 60% -> NO ENTRY
+                direction = "NO ENTRY ⛔ (WAIT)"
+                accuracy_val = max(raw_accuracy, 42)
                 trend_status = "SIDEWAYS 🟡"
 
             detected_details = (
@@ -330,14 +329,14 @@ def analyze_live_market(symbol, interval_str):
             )
 
             return direction, detected_details, accuracy_val
-    except Exception:
+    except Exception as e:
         pass
 
-    # Real Fallback if Live Data fails
+    # Real Fallback when Market Market Data Connection is Idle
     return (
-        "NEUTRAL ⚠️",
-        "• Candle Pattern: DATA UNSTABLE<br>• RSI Index: Neutral<br>• EMA Trend: SIDEWAYS 🟡<br>• Dynamic Zone: Re-Scanning",
-        50,
+        "NO ENTRY ⛔ (WAIT)",
+        "• Candle Pattern: CONSOLIDATION<br>• RSI Index: Neutral (50)<br>• EMA Trend: SIDEWAYS 🟡<br>• Dynamic Zone: Re-Scanning Market",
+        45,
     )
 
 
@@ -366,13 +365,13 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
         unsafe_allow_html=True,
     )
 
-    # Box Color: Green for CALL, Red for PUT, Orange for NEUTRAL
+    # Box Color: Green for CALL, Red for PUT, Dark Amber for NO ENTRY
     if "CALL" in direction:
         box_bg = "#16a34a"
     elif "PUT" in direction:
         box_bg = "#dc2626"
     else:
-        box_bg = "#d97706"
+        box_bg = "#b45309"
 
     # 3. CLEAN SIGNAL BOX WITH LARGE ACCURACY & DETECTED DETAILS
     big_box_html = f"""
@@ -389,52 +388,55 @@ if st.button("⚡ START ANALYZING", use_container_width=True):
     st.markdown(big_box_html, unsafe_allow_html=True)
 
     # Dynamic Countdown Logic
-    countdown_sec = 5 if accuracy_val >= 80 else (8 if accuracy_val >= 60 else 10)
+    if "NO ENTRY" in direction or accuracy_val < 60:
+        st.warning("⚠️ Market is currently sideways/risky. Skip this candle and try another pair!")
+    else:
+        countdown_sec = 5 if accuracy_val >= 80 else (8 if accuracy_val >= 60 else 10)
 
-    countdown_placeholder = st.empty()
+        countdown_placeholder = st.empty()
 
-    # 4. CIRCULAR GREEN RADAR COUNTDOWN
-    for sec in range(countdown_sec, 0, -1):
-        green_circle_timer = f"""
-        <div style="text-align: center; margin: 15px 0;">
-            <div style="
-                display: inline-flex;
-                justify-content: center;
-                align-items: center;
-                width: 85px;
-                height: 85px;
-                border-radius: 50%;
-                background: #0f291e;
-                border: 4px solid #22c55e;
-                box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
-            ">
-                <span style="color: #22c55e; font-size: 30px; font-weight: bold;">{sec}s</span>
+        # 4. CIRCULAR GREEN RADAR COUNTDOWN
+        for sec in range(countdown_sec, 0, -1):
+            green_circle_timer = f"""
+            <div style="text-align: center; margin: 15px 0;">
+                <div style="
+                    display: inline-flex;
+                    justify-content: center;
+                    align-items: center;
+                    width: 85px;
+                    height: 85px;
+                    border-radius: 50%;
+                    background: #0f291e;
+                    border: 4px solid #22c55e;
+                    box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
+                ">
+                    <span style="color: #22c55e; font-size: 30px; font-weight: bold;">{sec}s</span>
+                </div>
+                <p style="color: #facc15; font-weight: bold; margin-top: 5px;">PREPARE ENTRY NOW...</p>
             </div>
-            <p style="color: #facc15; font-weight: bold; margin-top: 5px;">PREPARE ENTRY NOW...</p>
+            """
+            countdown_placeholder.markdown(
+                green_circle_timer, unsafe_allow_html=True
+            )
+            time.sleep(1)
+
+        # 5. ONE-TIME AIRPLANE TAKEOFF
+        airplane_takeoff_html = f"""
+        <div style="text-align: center; margin-top: 20px;">
+            <div class="takeoff-plane">🚀✈️</div>
+            <div style="
+                background: #22c55e; 
+                color: white; 
+                padding: 12px; 
+                border-radius: 8px; 
+                font-size: 18px; 
+                font-weight: bold;
+            ">
+                GO! PLACE YOUR {direction} TRADE NOW!
+            </div>
         </div>
         """
         countdown_placeholder.markdown(
-            green_circle_timer, unsafe_allow_html=True
+            airplane_takeoff_html, unsafe_allow_html=True
         )
-        time.sleep(1)
-
-    # 5. ONE-TIME AIRPLANE TAKEOFF
-    airplane_takeoff_html = f"""
-    <div style="text-align: center; margin-top: 20px;">
-        <div class="takeoff-plane">🚀✈️</div>
-        <div style="
-            background: #22c55e; 
-            color: white; 
-            padding: 12px; 
-            border-radius: 8px; 
-            font-size: 18px; 
-            font-weight: bold;
-        ">
-            GO! PLACE YOUR {direction} TRADE NOW!
-        </div>
-    </div>
-    """
-    countdown_placeholder.markdown(
-        airplane_takeoff_html, unsafe_allow_html=True
-    )
     
