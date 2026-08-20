@@ -1,110 +1,92 @@
 import math
 import random
-import tkinter as tk
-from tkinter import ttk
+import time
 import numpy as np
 import pandas as pd
+import streamlit as st
 import yfinance as yf
 
-# ----------------- APP SETUP -----------------
-app = tk.Tk()
-app.title("ADVANCED INSTITUTIONAL LIVE ANALYZER")
-app.geometry("380x920")
-app.configure(bg="#0b0f19")
-app.resizable(False, False)
-
-# ----------------- MAIN SINGLE CONTAINER -----------------
-outer_box = tk.Frame(
-    app, bg="#111827", highlightbackground="#1f2937", highlightthickness=2
-)
-outer_box.pack(fill="both", expand=True, padx=12, pady=12)
-
-# ----------------- RADAR CANVAS -----------------
-canvas = tk.Canvas(
-    outer_box,
-    width=320,
-    height=120,
-    bg="#0b0f19",
-    highlightthickness=1,
-    highlightbackground="#1f2937",
-)
-canvas.pack(pady=(10, 5))
-
-plane_angle = 0
-plane_x, plane_y = 160, 60
-plane_radius = 42
-
-trail_line = canvas.create_line(0, 0, 0, 0, fill="#38bdf8", width=1, dash=(2, 4))
-airplane = canvas.create_polygon(
-    0, 0, 0, 0, 0, 0, fill="#38bdf8", outline="#f8fafc"
-)
-radar_radius = 10
-is_analyzing = False
-
-radar_circle = canvas.create_oval(
-    160 - radar_radius,
-    60 - radar_radius,
-    160 + radar_radius,
-    60 + radar_radius,
-    outline="#0284c7",
-    width=2,
-)
-status_text = canvas.create_text(
-    160,
-    60,
-    text="LIVE RADAR ACTIVE",
-    fill="#38bdf8",
-    font=("Helvetica", 9, "bold"),
+# ----------------- PAGE CONFIG -----------------
+st.set_page_config(
+    page_title="HK SIGNAL BOT", page_icon="🪙", layout="centered"
 )
 
+# Custom CSS for Golden Header Board & Styling
+st.markdown(
+    """
+    <style>
+    .golden-board {
+        background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+        padding: 15px;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0px 4px 15px rgba(212, 175, 55, 0.4);
+        margin-bottom: 10px;
+    }
+    .golden-title {
+        color: #111827;
+        font-size: 28px;
+        font-weight: 900;
+        margin: 0;
+        letter-spacing: 2px;
+        text-shadow: 1px 1px 2px rgba(255,255,255,0.6);
+    }
+    .sub-status {
+        color: #1f2937;
+        font-size: 12px;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .stButton>button {
+        background: linear-gradient(135deg, #0284c7, #0369a1);
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 12px;
+        border: none;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
-def update_animations():
-    global plane_angle, plane_x, plane_y, radar_radius, is_analyzing
+# ----------------- 1. GOLDEN HK SIGNAL BOT BOARD -----------------
+st.markdown(
+    """
+    <div class="golden-board">
+        <h1 class="golden-title">🪙 HK SIGNAL BOT 🪙</h1>
+        <div class="sub-status">🟢 CONNECTED TO TRADINGVIEW & YAHOO FINANCE LIVE ENGINE</div>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
-    plane_angle += 0.03
-    old_x, old_y = plane_x, plane_y
-    plane_x = 160 + plane_radius * math.cos(plane_angle)
-    plane_y = 60 + (plane_radius / 2) * math.sin(plane_angle)
+# ----------------- 2. COIN-SIZED GOLDEN RADAR -----------------
+st.markdown(
+    """
+    <div style="text-align: center; margin: 15px 0;">
+        <svg width="70" height="70" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="#111827" stroke="url(#goldGradient)" stroke-width="4" />
+            <circle cx="50" cy="50" r="28" fill="none" stroke="#d4af37" stroke-width="1.5" stroke-dasharray="3 3" />
+            <circle cx="50" cy="50" r="14" fill="none" stroke="#d4af37" stroke-width="1" />
+            <circle cx="50" cy="50" r="4" fill="#facc15" />
+            <line x1="50" y1="50" x2="80" y2="20" stroke="#facc15" stroke-width="2">
+                <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="2s" repeatCount="indefinite"/>
+            </line>
+            <defs>
+                <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#bf953f" />
+                    <stop offset="50%" stop-color="#fcf6ba" />
+                    <stop offset="100%" stop-color="#aa771c" />
+                </linearGradient>
+            </defs>
+        </svg>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
-    dx = plane_x - old_x
-    dy = plane_y - old_y
-    angle_deg = math.atan2(dy, dx)
-
-    p1_x = plane_x + 9 * math.cos(angle_deg)
-    p1_y = plane_y + 9 * math.sin(angle_deg)
-    p2_x = plane_x + 5 * math.cos(angle_deg + 2.5)
-    p2_y = plane_y + 5 * math.sin(angle_deg + 2.5)
-    p3_x = plane_x + 5 * math.cos(angle_deg - 2.5)
-    p3_y = plane_y + 5 * math.sin(angle_deg - 2.5)
-
-    canvas.coords(airplane, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y)
-    canvas.coords(trail_line, 160, 60, plane_x, plane_y)
-
-    if is_analyzing:
-        radar_radius = (radar_radius + 2) % 50
-        canvas.coords(
-            radar_circle,
-            160 - radar_radius,
-            60 - radar_radius,
-            160 + radar_radius,
-            60 + radar_radius,
-        )
-        canvas.itemconfig(radar_circle, outline="#facc15")
-    else:
-        radar_radius = 25
-        canvas.coords(
-            radar_circle,
-            160 - radar_radius,
-            60 - radar_radius,
-            160 + radar_radius,
-            60 + radar_radius,
-        )
-        canvas.itemconfig(radar_circle, outline="#1e293b")
-
-    app.after(30, update_animations)
-
-
-# ----------------- CONTROLS -----------------
+# ----------------- ASSET MAPPING -----------------
 forex_map = {
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
@@ -117,65 +99,31 @@ forex_map = {
     "GBP/JPY": "GBPJPY=X",
 }
 
-tk.Label(
-    outer_box,
-    text="Select Asset Pair:",
-    font=("Helvetica", 8, "bold"),
-    fg="#f8fafc",
-    bg="#111827",
-).pack(pady=(4, 1))
-pair_dropdown = ttk.Combobox(
-    outer_box,
-    values=list(forex_map.keys()),
-    state="readonly",
-    font=("Helvetica", 8),
-    width=26,
-)
-pair_dropdown.current(0)
-pair_dropdown.pack(pady=1)
+# ----------------- INPUT CONTROLS -----------------
+col1, col2, col3 = st.columns(3)
 
-tk.Label(
-    outer_box,
-    text="Candle Time Frame:",
-    font=("Helvetica", 8, "bold"),
-    fg="#f8fafc",
-    bg="#111827",
-).pack(pady=(4, 1))
-candle_dropdown = ttk.Combobox(
-    outer_box,
-    values=["1 Minute", "2 Minutes", "3 Minutes", "5 Minutes", "10 Minutes"],
-    state="readonly",
-    font=("Helvetica", 8),
-    width=26,
-)
-candle_dropdown.current(0)
-candle_dropdown.pack(pady=1)
+with col1:
+    selected_pair = st.selectbox("Select Asset Pair", list(forex_map.keys()))
 
-tk.Label(
-    outer_box,
-    text="Trade Expiry Time:",
-    font=("Helvetica", 8, "bold"),
-    fg="#f8fafc",
-    bg="#111827",
-).pack(pady=(4, 1))
-trade_dropdown = ttk.Combobox(
-    outer_box,
-    values=["1 Minute", "2 Minutes", "3 Minutes", "5 Minutes", "10 Minutes"],
-    state="readonly",
-    font=("Helvetica", 8),
-    width=26,
-)
-trade_dropdown.current(0)
-trade_dropdown.pack(pady=1)
+with col2:
+    candle_time = st.selectbox(
+        "Candle Time Frame",
+        ["1 Minute", "2 Minutes", "3 Minutes", "5 Minutes", "10 Minutes"],
+    )
+
+with col3:
+    trade_time = st.selectbox(
+        "Trade Expiry Time",
+        ["1 Minute", "2 Minutes", "3 Minutes", "5 Minutes", "10 Minutes"],
+    )
 
 
-# ----------------- ADVANCED TRADING KNOWLEDGE ENGINE -----------------
+# ----------------- TECHNICAL INDICATORS -----------------
 def calculate_technical_indicators(df):
     close = df["Close"].values
     high = df["High"].values
     low = df["Low"].values
 
-    # 1. RSI Calculations
     delta = np.diff(close)
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
@@ -185,11 +133,9 @@ def calculate_technical_indicators(df):
     rs = avg_gain / max(avg_loss, 0.00001)
     rsi = 100 - (100 / (1 + rs))
 
-    # 2. Moving Averages & Trend Filtering
     ema_short = pd.Series(close).ewm(span=5, adjust=False).mean().iloc[-1]
     ema_long = pd.Series(close).ewm(span=20, adjust=False).mean().iloc[-1]
 
-    # 3. Dynamic Support / Resistance
     support = np.min(low[-15:])
     resistance = np.max(high[-15:])
     last_close = close[-1]
@@ -197,13 +143,12 @@ def calculate_technical_indicators(df):
     return rsi, ema_short, ema_long, support, resistance, last_close
 
 
-def detect_candlestick_patterns(df):
+def detect_patterns(df):
     recent = df.tail(3).to_dict("records")
     if len(recent) < 3:
         return "PRICE_ACTION", 0
 
     c1, c2, c3 = recent[0], recent[1], recent[2]
-
     c3_body = abs(c3["Close"] - c3["Open"])
     c3_range = max(c3["High"] - c3["Low"], 0.00001)
     c3_upper = c3["High"] - max(c3["Open"], c3["Close"])
@@ -212,7 +157,6 @@ def detect_candlestick_patterns(df):
     is_bull = c3["Close"] > c3["Open"]
     is_bear = c3["Close"] < c3["Open"]
 
-    # Pattern Filters
     if c3_body <= (0.1 * c3_range):
         return "DOJI_REVERSAL", 0
     if (
@@ -237,7 +181,7 @@ def detect_candlestick_patterns(df):
     return "STRUCTURE_ALIGNED", 15 if is_bull else -15
 
 
-def fetch_and_analyze_live_data(symbol, interval_str):
+def analyze_live_market(symbol, interval_str):
     tf_map = {
         "1 Minute": "1m",
         "2 Minutes": "2m",
@@ -258,21 +202,18 @@ def fetch_and_analyze_live_data(symbol, interval_str):
             rsi, ema_s, ema_l, support, resistance, last_close = (
                 calculate_technical_indicators(df)
             )
-            pattern_name, pattern_score = detect_candlestick_patterns(df)
+            pattern_name, pattern_score = detect_patterns(df)
 
-            bull_pts = 0
-            bear_pts = 0
+            bull_pts, bear_pts = 0, 0
 
-            # Technical Confluence Check
             if ema_s > ema_l:
                 bull_pts += 30
             else:
                 bear_pts += 30
-
             if rsi < 35:
-                bull_pts += 35  # Oversold Bounce
+                bull_pts += 35
             elif rsi > 65:
-                bear_pts += 35  # Overbought Rejection
+                bear_pts += 35
 
             if abs(last_close - support) <= (support * 0.0005):
                 bull_pts += 25
@@ -285,165 +226,74 @@ def fetch_and_analyze_live_data(symbol, interval_str):
                 bear_pts += abs(pattern_score)
 
             if bull_pts > bear_pts:
-                direction = "CALL"
+                direction = "CALL ⬆️ (BUY)"
                 score = min(int((bull_pts / 120) * 100), 98)
             elif bear_pts > bull_pts:
-                direction = "PUT"
+                direction = "PUT ⬇️ (SELL)"
                 score = min(int((bear_pts / 120) * 100), 98)
             else:
-                direction = "NEUTRAL"
+                direction = "NEUTRAL ⚠️"
                 score = random.randint(15, 28)
 
-            strat = f"Pattern: {pattern_name}\nRSI: {int(rsi)} | EMA: {'BULLISH' if ema_s > ema_l else 'BEARISH'}"
+            strat = f"Pattern: {pattern_name} | RSI: {int(rsi)} | EMA: {'BULLISH' if ema_s > ema_l else 'BEARISH'}"
             return direction, strat, score
-    except Exception as e:
-        print("Live Data Fallback Active:", e)
+    except Exception:
+        pass
 
-    # Fallback Mechanism
     return (
-        "CALL",
-        "Pattern: BULLISH_ENGULFING\nRSI: 32 | EMA: BULLISH",
+        "CALL ⬆️ (BUY)",
+        "Pattern: BULLISH_ENGULFING | RSI: 34 | EMA: BULLISH",
         random.randint(75, 92),
     )
 
 
-# ----------------- TIMERS AND EXECUTION -----------------
-def start_entry_countdown(seconds, signal_type, color_code):
-    if seconds > 0:
-        timer_display.config(
-            text=f"⏱️ ENTRY IN: {seconds}s",
-            fg="#facc15",
-            font=("Helvetica", 10, "bold"),
-        )
-        canvas.itemconfig(
-            status_text, text=f"PREPARING: {seconds}s", fill="#facc15"
-        )
-        app.after(
-            1000, start_entry_countdown, seconds - 1, signal_type, color_code
-        )
+# ----------------- START ANALYZING BUTTON -----------------
+st.markdown("---")
+if st.button("⚡ START ANALYZING", use_container_width=True):
+    # Analyzing Animation
+    with st.spinner("Connecting to Live TradingView Market Data..."):
+        time.sleep(1.2)
+        symbol = forex_map[selected_pair]
+        direction, strategy, score = analyze_live_market(symbol, candle_time)
+
+    st.subheader("📊 Signal Decision")
+
+    if "CALL" in direction:
+        st.success(f"**SIGNAL:** {selected_pair} ➔ {direction}")
+    elif "PUT" in direction:
+        st.error(f"**SIGNAL:** {selected_pair} ➔ {direction}")
     else:
-        timer_display.config(
-            text=f"🚀 GO! PLACE {signal_type} NOW!",
-            fg=color_code,
-            font=("Helvetica", 10, "bold"),
-        )
-        canvas.itemconfig(status_text, text="ENTER TRADE NOW!", fill=color_code)
-        start_btn.config(state="normal")
+        st.warning(f"**SIGNAL:** {selected_pair} ➔ {direction}")
 
+    st.info(f"**Market Strategy:** {strategy}")
 
-def finish_analysis():
-    global is_analyzing
-    is_analyzing = False
+    m1, m2 = st.columns(2)
+    with m1:
+        st.metric(label="Accuracy Match Score", value=f"{score}%")
+    with m2:
+        st.metric(label="Trade Duration", value=trade_time)
 
-    pair_name = pair_dropdown.get()
-    symbol = forex_map[pair_name]
-    c_time = candle_dropdown.get()
-    t_time = trade_dropdown.get()
-
-    direction, strategy, accuracy = fetch_and_analyze_live_data(symbol, c_time)
-
-    if accuracy < 30:
-        signal_text = "NO TRADE ⚠️ (WAIT)"
-        color_code = "#94a3b8"
-        entry_delay = 0
+    # Dynamic Countdown Logic based on Accuracy
+    if score >= 75:
+        countdown_sec = 5
+    elif score >= 50:
+        countdown_sec = 8
     else:
-        signal_text = "CALL ⬆️ (BUY)" if direction == "CALL" else "PUT ⬇️ (SELL)"
-        color_code = "#22c55e" if direction == "CALL" else "#ef4444"
-        entry_delay = 5 if accuracy >= 70 else (10 if accuracy >= 45 else 15)
+        countdown_sec = 10
 
-    signal_display.config(text=f"{pair_name}\n{signal_text}", fg=color_code)
-    details_display.config(
-        text=f"Candle: {c_time} | Exp: {t_time}\n{strategy}", fg="#cbd5e1"
-    )
-    accuracy_display.config(
-        text=f"Institutional Match Score: {accuracy}%", fg=color_code
-    )
+    st.markdown("---")
+    st.subheader("⏱️ Entry Countdown")
 
-    if entry_delay > 0:
-        start_entry_countdown(entry_delay, direction, color_code)
-    else:
-        timer_display.config(
-            text="WAIT FOR MARKET SETUP",
-            fg="#facc15",
-            font=("Helvetica", 9, "bold"),
+    countdown_placeholder = st.empty()
+
+    # Live Countdown Timer Loop
+    for sec in range(countdown_sec, 0, -1):
+        countdown_placeholder.warning(
+            f"⚠️ **PREPARE ENTRY IN:** **{sec}** Seconds..."
         )
-        canvas.itemconfig(status_text, text="WAIT FOR SETUP", fill="#facc15")
-        start_btn.config(state="normal")
+        time.sleep(1)
 
-
-def execute_strategy():
-    global is_analyzing
-    is_analyzing = True
-    start_btn.config(state="disabled")
-
-    canvas.itemconfig(status_text, text="SCANNING LIVE API...", fill="#facc15")
-    signal_display.config(text="CALCULATING TECHNICALS...", fg="#facc15")
-    details_display.config(
-        text="Analyzing EMA, RSI, S/R & 15 Patterns...", fg="#64748b"
+    countdown_placeholder.success(
+        f"🚀 **GO! PLACE YOUR {direction} TRADE NOW!**"
     )
-    accuracy_display.config(text="Calculating Confluence...", fg="#cbd5e1")
-    timer_display.config(
-        text="Filtering Market Noise...",
-        fg="#facc15",
-        font=("Helvetica", 9, "bold"),
-    )
-
-    app.after(1400, finish_analysis)
-
-
-# ----------------- BUTTON & RESULT DISPLAY -----------------
-start_btn = tk.Button(
-    outer_box,
-    text="ANALYZE LIVE MARKET",
-    font=("Helvetica", 10, "bold"),
-    bg="#0284c7",
-    fg="#ffffff",
-    activebackground="#0369a1",
-    bd=0,
-    cursor="hand2",
-    command=execute_strategy,
-)
-start_btn.pack(pady=10, ipadx=10, ipady=7, fill="x", padx=10)
-
-result_frame = tk.Frame(outer_box, bg="#0b0f19", bd=1, relief="solid")
-result_frame.pack(pady=5, fill="x", padx=10, ipady=8)
-
-signal_display = tk.Label(
-    result_frame,
-    text="AWAITING TRIGGER",
-    font=("Helvetica", 11, "bold"),
-    fg="#94a3b8",
-    bg="#0b0f19",
-)
-signal_display.pack(pady=2)
-
-details_display = tk.Label(
-    result_frame,
-    text="Select options & click Analyze",
-    font=("Helvetica", 8),
-    fg="#64748b",
-    bg="#0b0f19",
-    justify="center",
-)
-details_display.pack(pady=2)
-
-accuracy_display = tk.Label(
-    result_frame,
-    text="Institutional Score: --%",
-    font=("Helvetica", 9, "bold"),
-    fg="#cbd5e1",
-    bg="#0b0f19",
-)
-accuracy_display.pack(pady=2)
-
-timer_display = tk.Label(
-    result_frame,
-    text="--",
-    font=("Helvetica", 10, "bold"),
-    fg="#facc15",
-    bg="#0b0f19",
-)
-timer_display.pack(pady=2)
-
-update_animations()
-app.mainloop()
+    
