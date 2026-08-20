@@ -6,28 +6,102 @@ import time
 
 st.set_page_config(page_title="HK Signal Bot", layout="wide")
 
-# Custom Styling
+# Custom Styling with Coin Radar Animation
 st.markdown("""
     <style>
     .gold-title {
         font-size: 42px;
         font-weight: 800;
+        text-align: center;
         background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #B8860B 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0px;
     }
+    .sub-title {
+        text-align: center;
+        color: #888;
+        font-size: 18px;
+        margin-bottom: 15px;
+    }
+    
+    /* Coin Sized Radar Styling */
+    .radar-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 15px 0;
+    }
+    .coin-radar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(0,230,118,0.2) 0%, rgba(0,0,0,0.9) 70%);
+        border: 3px solid #FFD700;
+        box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .coin-radar::before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        border: 2px dashed #00E676;
+    }
+    .spinning-radar {
+        animation: spin 1.5s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .radar-center-dot {
+        width: 12px;
+        height: 12px;
+        background-color: #FF1744;
+        border-radius: 50%;
+        box-shadow: 0 0 8px #FF1744;
+    }
+
     .signal-card { padding: 25px; border-radius: 20px; text-align: center; color: white; margin-top: 15px; }
     .buy-bg { background: linear-gradient(135deg, #00E676, #004D40); }
     .sell-bg { background: linear-gradient(135deg, #FF1744, #880E4F); }
-    .stButton > button { width: 100%; height: 70px; font-size: 24px; font-weight: bold; background: linear-gradient(90deg, #1A237E, #311B92); color: white; border-radius: 15px; border: none; }
+    
+    /* Centered Start Button */
+    .stButton > button { 
+        width: 100%; 
+        max-width: 400px;
+        height: 65px; 
+        font-size: 22px; 
+        font-weight: bold; 
+        background: linear-gradient(90deg, #1A237E, #311B92); 
+        color: white; 
+        border-radius: 15px; 
+        border: 2px solid #FFD700;
+        margin: 0 auto;
+        display: block;
+    }
     .timer-display { font-size: 80px; font-weight: bold; color: #FFD600; text-align: center; background: #111; padding: 10px; border-radius: 15px; border: 2px solid #FFD600; }
     </style>
 """, unsafe_allow_html=True)
 
-# Golden Title Header
+# Golden Title Header & Subtitle
 st.markdown('<h1 class="gold-title">⚡ HK Signal Bot</h1>', unsafe_allow_html=True)
-st.subheader("Multi-Timeframe Advanced Price Action Engine")
+st.markdown('<div class="sub-title">Multi-Timeframe Advanced Price Action Engine</div>', unsafe_allow_html=True)
+
+# Coin-Sized Radar UI Element
+radar_box = st.empty()
+radar_box.markdown('''
+    <div class="radar-container">
+        <div class="coin-radar">
+            <div class="radar-center-dot"></div>
+        </div>
+    </div>
+''', unsafe_allow_html=True)
 
 # Sidebar Configuration
 st.sidebar.header("⚙️ Trading Configuration")
@@ -235,8 +309,21 @@ def analyze_advanced_market(symbol, candle_tf, trade_secs):
         "rsi": rsi_val, "prep_timer": prep_timer
     }
 
-# Start Button Execution
-if st.button("🚀 START ANALYZING MARKET"):
+# Centered Start Button Execution
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    start_btn = st.button("🚀 START ANALYZING MARKET")
+
+if start_btn:
+    # Trigger Radar Spinning Animation
+    radar_box.markdown('''
+        <div class="radar-container">
+            <div class="coin-radar spinning-radar">
+                <div class="radar-center-dot"></div>
+            </div>
+        </div>
+    ''', unsafe_allow_html=True)
+
     radar_placeholder = st.empty()
     for stage in [
         f"📡 Scanning 15 Candlestick Patterns on {candle_time}...",
@@ -246,6 +333,15 @@ if st.button("🚀 START ANALYZING MARKET"):
         radar_placeholder.info(stage)
         time.sleep(0.5)
     radar_placeholder.empty()
+
+    # Reset Radar Animation
+    radar_box.markdown('''
+        <div class="radar-container">
+            <div class="coin-radar">
+                <div class="radar-center-dot"></div>
+            </div>
+        </div>
+    ''', unsafe_allow_html=True)
 
     res = analyze_advanced_market(all_pairs[selected_pair], candle_tf_map[candle_time], selected_trade_seconds)
 
@@ -275,6 +371,3 @@ if st.button("🚀 START ANALYZING MARKET"):
         st.balloons()
     else:
         st.error("⚠️ Live market data is updating. Select '1m Candle' or '5m Candle' and try again.")
-else:
-    st.info("👆 Select settings from sidebar and click **START ANALYZING MARKET**.")
-            
