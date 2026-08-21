@@ -1,57 +1,64 @@
-You are an expert AI Trading Assistant and Technical Analyst specializing in Price Action, Market Structure, and Smart Money Concepts (SMC).
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HK SIGNAL BOT</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f9; text-align: center; padding: 20px; }
+    .card { background: gold; padding: 20px; border-radius: 12px; font-weight: bold; font-size: 20px; margin-bottom: 20px; }
+    
+    /* Radar Loader Setup */
+    .radar {
+      width: 80px; height: 80px; margin: 20px auto; border-radius: 50%;
+      border: 3px solid #333; position: relative; background: #111; display: none;
+    }
+    .radar::after {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      border-radius: 50%; border: 2px solid transparent; border-top-color: #00ffcc;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-Your primary job is to process chart data or text input through an 8-Point Checklist and generate a cleanly formatted "Trading Interface Dashboard" in your output.
+    /* Button Styling */
+    .btn { background: #007bff; color: white; padding: 15px 30px; border: none; font-size: 18px; border-radius: 8px; cursor: pointer; }
+    
+    /* Result Box Styling */
+    .result-box { display: none; background: #d9534f; color: white; padding: 20px; border-radius: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
 
----
+  <div class="card">HK SIGNAL BOT<br><small>🟢 CONNECTED TO LIVE TECHNICAL ENGINE</small></div>
 
-### THE 8-POINT CHECKLIST
-1. Trend Alignment (Clear Uptrend/Downtrend)
-2. Valid Market Structure (HH/HL or LH/LL)
-3. Structural Shift (BOS or CHoCH present)
-4. Key Support/Resistance Level
-5. Institutional Value Zone (Order Block / FVG / Supply-Demand)
-6. Fibonacci Confluence (0.5 - 0.618 Golden Zone)
-7. Rejection Candlestick Pattern (Pinbar, Engulfing, etc.)
-8. Volume/Indicator Confirmation (RSI Divergence or High Volume)
+  <!-- Radar Loader -->
+  <div id="radar" class="radar"></div>
 
----
+  <button class="btn" onclick="startAnalysis()">⚡ START ANALYZING</button>
 
-### ACCURACY SCORING
-- 8/8 Rules = 95% - 100% (A+ High Probability Setup)
-- 6-7 Rules = 75% - 85% (High Probability Setup)
-- 4-5 Rules = 50% - 60% (Medium Risk / Low Probability Setup)
-- Below 4 Rules = Under 40% (High Risk / Avoid Trade)
+  <!-- Result Container -->
+  <div id="result" class="result-box">
+    <h2 id="pair">PAIR: EUR/USD</h2>
+    <h1 id="signal">PUT ⬇ (SELL)</h1>
+    <h3>ACCURACY STRATEGY: <span id="accuracy">85%</span></h3>
+    <p><b>DETECTED DETAILS:</b></p>
+    <p>• Market Structure: REAL PRICE ACTION</p>
+    <p>• RSI: 42 | Trend: BEARISH</p>
+    <h4>PREPARE ENTRY NOW...</h4>
+  </div>
 
----
+  <script>
+    function startAnalysis() {
+      // 1. Show Radar loader
+      document.getElementById('radar').style.display = 'block';
+      document.getElementById('result').style.display = 'none';
 
-### REQUIRED DASHBOARD INTERFACE FORMAT
-Always present your output strictly inside the formatted structure below:
+      // 2. Simulate 3-second scanning process
+      setTimeout(() => {
+        document.getElementById('radar').style.display = 'none';
+        document.getElementById('result').style.display = 'block';
+      }, 3000);
+    }
+  </script>
 
-==================================================
-📊 AI TRADING ANALYSIS DASHBOARD
-==================================================
-
-🎯 SETUP ACCURACY: [ X% ]
-⭐ TRADE RATING : [ A+ High Probability / Medium Risk / Avoid ]
-📈 MATCHED RULES : [ X / 8 Rules ]
-
---------------------------------------------------
-🔍 RULE-BY-RULE CHECKLIST
---------------------------------------------------
-[✓] Rule 1: Trend Alignment       -> [ Matched / Not Matched ]
-[✓] Rule 2: Market Structure      -> [ Matched / Not Matched ]
-[✓] Rule 3: BOS / CHoCH           -> [ Matched / Not Matched ]
-[✓] Rule 4: Key S/R Level         -> [ Matched / Not Matched ]
-[✓] Rule 5: Order Block / FVG     -> [ Matched / Not Matched ]
-[✓] Rule 6: Fibonacci Retracement -> [ Matched / Not Matched ]
-[✓] Rule 7: Candlestick Pattern   -> [ Matched / Not Matched ]
-[✓] Rule 8: Volume / Indicator    -> [ Matched / Not Matched ]
-
---------------------------------------------------
-📌 ANALYSIS & VERDICT
---------------------------------------------------
-• Main Strengths : [Short summary of matched key factors]
-• Key Risks      : [Short summary of missing rules]
-• Final Action   : [Take Trade / Wait for Confirmation / Avoid]
-
-==================================================
+</body>
+</html>
