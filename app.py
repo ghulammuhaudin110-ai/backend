@@ -4,9 +4,10 @@ import numpy as np
 import yfinance as yf
 import time
 from datetime import datetime
+import pytz
 
 # --- Page Setup ---
-st.set_page_config(page_title="HK SIGNAL BOt", page_icon="📈", layout="centered")
+st.set_page_config(page_title="HK SIGNAL BOARD", page_icon="📈", layout="centered")
 
 # Custom CSS for HK Signal Board Design
 st.markdown("""
@@ -61,13 +62,13 @@ st.markdown("""
     }
     .no-signal {
         color: #FFCC00;
-        font-size: 26px;
+        font-size: 24px;
         font-weight: bold;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Yahoo Finance Yahoo Ticker Mapping
+# Yahoo Finance Asset Symbol Mapping
 PAIR_MAP = {
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
@@ -84,7 +85,6 @@ PAIR_MAP = {
 # Live Data Fetching and Technical Calculations
 def fetch_and_analyze_live_market(ticker):
     try:
-        # Download 1-minute live data for the last 1 day
         df = yf.download(tickers=ticker, period="1d", interval="1m", progress=False)
         
         if df.empty or len(df) < 50:
@@ -94,7 +94,7 @@ def fetch_and_analyze_live_market(ticker):
         high = df['High'].squeeze()
         low = df['Low'].squeeze()
 
-        # 1. EMA 200 Calculation
+        # 1. EMA 200
         ema_200 = close.ewm(span=200, adjust=False).mean()
 
         # 2. RSI Calculation
@@ -118,12 +118,10 @@ def fetch_and_analyze_live_market(ticker):
         curr_k = float(stoch_k.iloc[-1])
         curr_d = float(stoch_d.iloc[-1])
 
-        # Strict Filtration Rules
-        # CALL Signal
+        # Signal Rules
         if curr_price > curr_ema and curr_rsi > 30 and prev_rsi <= 35 and curr_k > curr_d:
             return "UP ↑ (CALL)", 89, curr_price
         
-        # PUT Signal
         elif curr_price < curr_ema and curr_rsi < 70 and prev_rsi >= 65 and curr_k < curr_d:
             return "DOWN ↓ (PUT)", 91, curr_price
         
@@ -133,13 +131,17 @@ def fetch_and_analyze_live_market(ticker):
     except Exception:
         return "ERROR FETCHING DATA", 0, 0.0
 
-# --- UI Layout ---
+# --- Header UI ---
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">LIVE YAHOO FINANCE MARKET BOT</div>', unsafe_allow_html=True)
 
-st.write(f"⏰ **System Live Time:** `{datetime.now().strftime('%H:%M:%S')}`")
+# Timezone Auto Fix (Asia/Karachi for PST Time)
+local_tz = pytz.timezone('Asia/Karachi')
+current_local_time = datetime.now(local_tz).strftime('%H:%M:%S')
 
-# Asset & Timeframe Selectors
+st.write(f"⏰ **System Live Time (PKT):** `{current_local_time}`")
+
+# Asset & Timeframe Selection
 col1, col2, col3 = st.columns(3)
 with col1:
     selected_pair_name = st.selectbox("Live Forex Asset", list(PAIR_MAP.keys()))
@@ -152,13 +154,13 @@ ticker_symbol = PAIR_MAP[selected_pair_name]
 
 st.divider()
 
-# Radar Display
+# Radar Animation Box
 st.markdown('<div class="radar-box"><h3 style="color:#00FF00; margin:0; font-size:16px;">LIVE SCAN</h3></div>', unsafe_allow_html=True)
 st.write("")
 
 # Action Button
 if st.button("🚀 START ANALYZING", use_container_width=True):
-    with st.spinner(f"Fetching Live Market Data for {selected_pair_name} from Yahoo Finance..."):
+    with st.spinner(f"Fetching Live Market Data for {selected_pair_name}..."):
         time.sleep(1.5)
         
         signal, accuracy, live_price = fetch_and_analyze_live_market(ticker_symbol)
@@ -171,7 +173,6 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
             st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
             
-            # Countdown Entry Timer
             st.warning("⏱️ **Entry Countdown Started!**")
             timer_placeholder = st.empty()
             for countdown in range(10, 0, -1):
@@ -185,7 +186,6 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
             st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
             
-            # Countdown Entry Timer
             st.warning("⏱️ **Entry Countdown Started!**")
             timer_placeholder = st.empty()
             for countdown in range(10, 0, -1):
@@ -197,7 +197,7 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.markdown(f'<div class="no-signal">{signal}</div>', unsafe_allow_html=True)
             if live_price > 0:
                 st.write(f"💵 **Current Price:** `{live_price:.5f}`")
-            st.info("मार्केट में अभी कोई मजबूत और सुरक्षित एंट्री नहीं है। वीकेंड की वजह से मार्केट बंद हो सकती है या इंडिकेटर्स मैच नहीं हो रहे हैं।")
+            st.info("मार्केट बंद है (वीकेंड) या फिर अभी कोई सुरक्षित एंट्री नहीं मिल रही है।")
             
         st.markdown('</div>', unsafe_allow_html=True)
-            
+    
