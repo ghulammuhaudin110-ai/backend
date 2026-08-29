@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 import time
 from datetime import datetime
 import random
@@ -62,7 +61,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. Signal Logic ---
+# Pure Technical Calculations
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def calculate_stochastic(df, period=14, smooth_k=3):
+    low_min = df['low'].rolling(window=period).min()
+    high_max = df['high'].rolling(window=period).max()
+    stoch_k = 100 * ((df['close'] - low_min) / (high_max - low_min))
+    stoch_d = stoch_k.rolling(window=smooth_k).mean()
+    return stoch_k, stoch_d
+
 def get_high_accuracy_signal():
     np.random.seed(int(time.time()))
     close_prices = np.cumsum(np.random.randn(250)) + 100
@@ -74,11 +87,9 @@ def get_high_accuracy_signal():
         'volume': np.random.randint(100, 1000, 250)
     })
 
-    df['EMA_200'] = ta.ema(df['close'], length=200)
-    df['RSI'] = ta.rsi(df['close'], length=14)
-    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3, smooth_k=3)
-    df['STOCH_k'] = stoch['STOCHk_14_3_3']
-    df['STOCH_d'] = stoch['STOCHd_14_3_3']
+    df['EMA_200'] = df['close'].ewm(span=200, adjust=False).mean()
+    df['RSI'] = calculate_rsi(df['close'], period=14)
+    df['STOCH_k'], df['STOCH_d'] = calculate_stochastic(df, period=14)
 
     curr = df.iloc[-1]
     prev = df.iloc[-2]
@@ -93,21 +104,19 @@ def get_high_accuracy_signal():
         signal = "DOWN ↓"
         accuracy = random.randint(85, 95)
     else:
-        # Fallback for demo simulation if strict condition fails
         choices = ["UP ↑", "DOWN ↓"]
         signal = random.choice(choices)
         accuracy = random.randint(86, 93)
 
     return signal, accuracy
 
-# --- 2. Header UI ---
+# Header UI
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">BINARY OPTIONS PREMIUM BOT</div>', unsafe_allow_html=True)
 
-# Live Clock
 st.write(f"⏰ **Live Time:** {datetime.now().strftime('%H:%M:%S')}")
 
-# --- 3. Inputs / Options ---
+# Inputs
 col1, col2, col3 = st.columns(3)
 with col1:
     pair = st.selectbox("Select Pair", ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "OTC_EURUSD", "OTC_GBPJPY"])
@@ -118,20 +127,17 @@ with col3:
 
 st.divider()
 
-# --- 4. Radar Animation Area ---
+# Radar Area
 st.markdown('<div class="radar-box"><h3 style="color:#00FF00; margin:0;">SCANNING</h3></div>', unsafe_allow_html=True)
-
-st.write("")
 st.write("")
 
-# --- 5. Action Button ---
+# Action Button
 if st.button("🚀 START ANALYZING", use_container_width=True):
     with st.spinner("Analyzing Market Data & Technical Indicators..."):
-        time.sleep(2) # Analysis loading effect
+        time.sleep(2)
         
         signal, accuracy = get_high_accuracy_signal()
         
-        # Display Results
         st.markdown('<div class="signal-card">', unsafe_allow_html=True)
         
         if "UP" in signal:
@@ -142,7 +148,6 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
         st.write(f"🎯 **Accuracy:** `{accuracy}%`")
         st.write(f"📊 **Asset:** `{pair}` | ⏱️ **Expiry:** `{trade_time}`")
         
-        # Countdown Timer Simulation
         st.warning("⏱️ **Entry Countdown Started!**")
         timer_placeholder = st.empty()
         
@@ -152,4 +157,4 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             
         timer_placeholder.markdown("## 🟢 **GO! ENTRY NOW!**")
         st.markdown('</div>', unsafe_allow_html=True)
-    
+            
