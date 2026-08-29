@@ -160,7 +160,7 @@ st.write("")
 
 # Action Button
 if st.button("🚀 START ANALYZING", use_container_width=True):
-    with st.spinner(f"Fetching Live Market Data for {selected_pair_name}..."):
+    with st.spinner(f"Live market data fetch ho raha hai: {selected_pair_name}..."):
         time.sleep(1.5)
         
         signal, accuracy, live_price = fetch_and_analyze_live_market(ticker_symbol)
@@ -173,12 +173,12 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
             st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
             
-            st.warning("⏱️ **Entry Countdown Started!**")
+            st.warning("⏱️ **Entry Countdown Shuru Ho Gaya Hai!**")
             timer_placeholder = st.empty()
             for countdown in range(10, 0, -1):
                 timer_placeholder.markdown(f"### ⏳ Entry in: `{countdown}s`")
                 time.sleep(1)
-            timer_placeholder.markdown("## 🟢 **GO! ENTRY NOW!**")
+            timer_placeholder.markdown("## 🟢 **GO! ENTRY ABHI LAGAEIN!**")
 
         elif "DOWN" in signal:
             st.markdown(f'<div class="down-signal">{signal}</div>', unsafe_allow_html=True)
@@ -186,18 +186,18 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
             st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
             
-            st.warning("⏱️ **Entry Countdown Started!**")
+            st.warning("⏱️ **Entry Countdown Shuru Ho Gaya Hai!**")
             timer_placeholder = st.empty()
             for countdown in range(10, 0, -1):
                 timer_placeholder.markdown(f"### ⏳ Entry in: `{countdown}s`")
                 time.sleep(1)
-            timer_placeholder.markdown("## 🟢 **GO! ENTRY NOW!**")
+            timer_placeholder.markdown("## 🟢 **GO! ENTRY ABHI LAGAEIN!**")
 
         else:
             st.markdown(f'<div class="no-signal">{signal}</div>', unsafe_allow_html=True)
             if live_price > 0:
                 st.write(f"💵 **Current Price:** `{live_price:.5f}`")
-            st.info("मार्केट बंद है (वीकेंड) या फिर अभी कोई सुरक्षित एंट्री नहीं मिल रही है।")
+            st.info("Market abhi band hai (Weekend) ya phir koi safe entry signal nahi mil raha hai.")
             
         st.markdown('</div>', unsafe_allow_html=True)
-    
+        
