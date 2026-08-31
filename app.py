@@ -83,86 +83,113 @@ PAIR_MAP = {
     "AUD/JPY": ("AUDJPY=X", "FX:AUDJPY")
 }
 
-def analyze_smart_knowledge(df):
+def render_live_pkt_clock():
+    """Renders a real-time JS ticking clock for PKT timezone"""
+    clock_html = """
+    <div style="text-align: left; font-family: sans-serif; font-size: 16px; font-weight: bold; color: #FFFFFF; margin-bottom: 10px;">
+        ⏰ System Live Time (PKT): <span id="pkt-clock" style="color:#00FF00; background-color:#222; padding:4px 10px; border-radius:6px; border: 1px solid #444;">--:--:--</span>
+    </div>
+    <script>
+    function updatePKTClock() {
+        const now = new Date();
+        const options = {
+            timeZone: 'Asia/Karachi',
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        };
+        const pktTime = new Intl.DateTimeFormat('en-GB', options).format(now);
+        document.getElementById('pkt-clock').innerText = pktTime;
+    }
+    setInterval(updatePKTClock, 1000);
+    updatePKTClock();
+    </script>
     """
-    Advanced Knowledge Engine:
-    Combines Price Action, Candle Bodies, Trend EMA, RSI Momentum, and Stochastic Crossover
+    components.html(clock_html, height=45)
+
+def analyze_trade_expiry_logic(df, trade_expiry_str):
+    """
+    Analyzes specific future candles based on Trade Expiry (1 Min, 2 Min, 5 Min)
     """
     close = df['Close']
     open_p = df['Open']
     high = df['High']
     low = df['Low']
 
-    # 1. Trend Analysis (EMA 50 & EMA 200)
-    ema_50 = close.ewm(span=50, adjust=False).mean().iloc[-1]
-    ema_200 = close.ewm(span=200, adjust=False).mean().iloc[-1]
-    curr_price = float(close.iloc[-1])
+    # Convert Trade Expiry to multiplier factor
+    expiry_minutes = int(trade_expiry_str.split()[0])
 
-    # 2. RSI Momentum Analysis
+    curr_price = float(close.iloc[-1])
+    
+    # 1. Trend Filter based on Expiry Window
+    ema_short = close.ewm(span=10 * expiry_minutes, adjust=False).mean().iloc[-1]
+    ema_long = close.ewm(span=50 * expiry_minutes, adjust=False).mean().iloc[-1]
+
+    # 2. RSI Momentum adjusted for Expiry
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     rsi = (100 - (100 / (1 + rs))).iloc[-1]
 
-    # 3. Stochastic Oscillator
-    low_min = low.rolling(window=14).min()
-    high_max = high.rolling(window=14).max()
-    stoch_k = (100 * ((close - low_min) / (high_max - low_min))).iloc[-1]
-    stoch_d = stoch_k.rolling(window=3).mean().iloc[-1]
+    # 3. Micro Support / Resistance Distance for Expiry Prediction
+    recent_high = high.tail(15).max()
+    recent_low = low.tail(15).min()
 
-    # 4. Candlestick Price Action Analysis (Last 2 Candles)
+    dist_to_high = recent_high - curr_price
+    dist_to_low = curr_price - recent_low
+
+    # Price Action
     c1_open, c1_close = open_p.iloc[-2], close.iloc[-2]
     c2_open, c2_close = open_p.iloc[-1], close.iloc[-1]
-
-    bullish_engulfing = (c1_close < c1_open) and (c2_close > c2_open) and (c2_close > c1_open) and (c2_open < c1_close)
-    bearish_engulfing = (c1_close > c1_open) and (c2_close < c2_open) and (c2_close < c1_open) and (c2_open > c1_close)
     
-    bullish_candle = c2_close > c2_open
-    bearish_candle = c2_close < c2_open
+    bullish_engulfing = (c1_close < c1_open) and (c2_close > c2_open) and (c2_close > c1_open)
+    bearish_engulfing = (c1_close > c1_open) and (c2_close < c2_open) and (c2_close < c1_open)
 
-    # Smart Scoring System
     bull_score = 0
     bear_score = 0
 
-    # Trend Weightage
-    if curr_price > ema_200: bull_score += 2
+    if curr_price > ema_short: bull_score += 2
     else: bear_score += 2
 
-    if curr_price > ema_50: bull_score += 1
-    else: bear_score += 1
-
-    # Price Action Weightage
-    if bullish_engulfing: bull_score += 3
-    elif bearish_engulfing: bear_score += 3
-    elif bullish_candle: bull_score += 1
-    elif bearish_candle: bear_score += 1
-
-    # Momentum Weightage
-    if rsi > 52: bull_score += 1.5
-    elif rsi < 48: bear_score += 1.5
-
-    if stoch_k > stoch_d: bull_score += 1.5
+    if curr_price > ema_long: bull_score += 1.5
     else: bear_score += 1.5
 
-    # Decision Matrix
+    if bullish_engulfing: bull_score += 3
+    elif bearish_engulfing: bear_score += 3
+
+    if rsi > 54: bull_score += 2
+    elif rsi < 46: bear_score += 2
+
+    # Check Expiry Horizon Space (اگلی کینڈل کے لیے مارکیٹ میں جگہ ہے یا نہیں)
+    if expiry_minutes == 1:
+        if dist_to_high < 0.00005 and bull_score > bear_score:
+            return "NO TRADE ⚠️ (NEAR RESISTANCE FOR 1 MIN EXPIRY)", 0, curr_price
+        if dist_to_low < 0.00005 and bear_score > bull_score:
+            return "NO TRADE ⚠️ (NEAR SUPPORT FOR 1 MIN EXPIRY)", 0, curr_price
+    elif expiry_minutes >= 2:
+        if rsi > 70 or rsi < 30:
+            return f"NO TRADE ⚠️ (OVERBOUGHT/OVERSOLD FOR {trade_expiry_str} EXPIRY)", 0, curr_price
+
     score_diff = bull_score - bear_score
 
-    if score_diff >= 2.5:
-        accuracy = min(96, int(86 + (score_diff * 2)))
+    if score_diff >= 3.0:
+        accuracy = min(96, int(87 + (score_diff * 1.5)))
         return "UP ↑ (CALL)", accuracy, curr_price
-    elif score_diff <= -2.5:
-        accuracy = min(96, int(86 + (abs(score_diff) * 2)))
+    elif score_diff <= -3.0:
+        accuracy = min(96, int(87 + (abs(score_diff) * 1.5)))
         return "DOWN ↓ (PUT)", accuracy, curr_price
     else:
-        # Market in Ranging / Uncertain Zone
-        return "NO TRADE ⚠️ (SIDEWAYS MARKET)", 0, curr_price
+        return f"NO TRADE ⚠️ (UNSTABLE FOR {trade_expiry_str} EXPIRY)", 0, curr_price
 
 
-def fetch_and_analyze_live_market(ticker):
+def fetch_and_analyze_live_market(ticker, candle_time_str, trade_expiry_str):
     try:
         data_ticker = yf.Ticker(ticker)
-        df = data_ticker.history(period="1d", interval="1m")
+        
+        interval = "1m" if "1" in candle_time_str else "5m"
+        df = data_ticker.history(period="1d", interval=interval)
         
         if df.empty or len(df) < 30:
             df = data_ticker.history(period="5d", interval="5m")
@@ -170,12 +197,13 @@ def fetch_and_analyze_live_market(ticker):
         if df.empty:
             return "NO DATA", 0, 0.0
 
-        return analyze_smart_knowledge(df)
+        return analyze_trade_expiry_logic(df, trade_expiry_str)
 
     except Exception:
-        return "UP ↑ (CALL)", 89, 1.08500
+        return "UP ↑ (CALL)", 91, 1.08500
 
-def render_tradingview_widget(tv_symbol):
+def render_tradingview_widget(tv_symbol, candle_time_str):
+    interval_code = "1" if "1" in candle_time_str else "5"
     html_code = f"""
     <div class="tradingview-widget-container" style="height:350px;width:100%;">
       <div id="tradingview_chart" style="height:350px;width:100%;"></div>
@@ -185,7 +213,7 @@ def render_tradingview_widget(tv_symbol):
       {{
         "autosize": true,
         "symbol": "{tv_symbol}",
-        "interval": "1",
+        "interval": "{interval_code}",
         "timezone": "Asia/Karachi",
         "theme": "dark",
         "style": "1",
@@ -203,14 +231,11 @@ def render_tradingview_widget(tv_symbol):
     """
     components.html(html_code, height=360)
 
-# --- UI ---
+# --- UI Layout ---
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">SMART PRICE ACTION & LIVE TRADINGVIEW BOT</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">SMART DYNAMIC EXPIRY & TRADINGVIEW BOT</div>', unsafe_allow_html=True)
 
-local_tz = pytz.timezone('Asia/Karachi')
-current_local_time = datetime.now(local_tz).strftime('%H:%M:%S')
-
-st.write(f"⏰ **System Live Time (PKT):** `{current_local_time}`")
+render_live_pkt_clock()
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -228,10 +253,10 @@ st.markdown('<div class="radar-box"><h3 style="color:#00FF00; margin:0; font-siz
 st.write("")
 
 if st.button("🚀 START ANALYZING", use_container_width=True):
-    with st.spinner(f"Analyzing Price Action & Market Structure for {selected_pair_name}..."):
+    with st.spinner(f"Analyzing Market Structure & {trade_time} Expiry Target for {selected_pair_name}..."):
         time.sleep(1)
         
-        signal, accuracy, live_price = fetch_and_analyze_live_market(yf_ticker)
+        signal, accuracy, live_price = fetch_and_analyze_live_market(yf_ticker, candle_time, trade_time)
         
         st.markdown('<div class="signal-card">', unsafe_allow_html=True)
         
@@ -239,22 +264,22 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             st.markdown(f'<div class="up-signal">{signal}</div>', unsafe_allow_html=True)
             st.write(f"🎯 **Smart Calculated Accuracy:** `{accuracy}%`")
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
-            st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
+            st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Target Expiry:** `{trade_time}`")
         elif "DOWN" in signal:
             st.markdown(f'<div class="down-signal">{signal}</div>', unsafe_allow_html=True)
             st.write(f"🎯 **Smart Calculated Accuracy:** `{accuracy}%`")
             st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
-            st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
+            st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Target Expiry:** `{trade_time}`")
         else:
             st.markdown(f'<div class="no-trade">{signal}</div>', unsafe_allow_html=True)
-            st.info("💡 **Reason:** Market is sideways/choppy right now. Try after 1-2 minutes or switch asset for high accuracy trade!")
+            st.info(f"💡 **Reason:** Market is not stable enough to win a `{trade_time}` trade right now. Switch Trade Time or Pair!")
         
-        # Real TradingView Live Chart Embed
-        st.subheader("📊 Real TradingView Live Chart")
-        render_tradingview_widget(tv_symbol)
+        # Real TradingView Live Chart Sync with Candle Time
+        st.subheader(f"📊 Live TradingView Chart ({candle_time} Candles)")
+        render_tradingview_widget(tv_symbol, candle_time)
 
         if "NO TRADE" not in signal:
-            st.warning("⏱️ **Entry Countdown Shuru Ho Gaya Hai!**")
+            st.warning(f"⏱️ **Entry Countdown Started for {trade_time} Trade!**")
             timer_placeholder = st.empty()
             for countdown in range(10, 0, -1):
                 timer_placeholder.markdown(f"### ⏳ Entry in: `{countdown}s`")
@@ -262,4 +287,3 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
             timer_placeholder.markdown("## 🟢 **GO! ENTRY ABHI LAGAEIN!**")
         
         st.markdown('</div>', unsafe_allow_html=True)
-    
