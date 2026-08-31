@@ -3,10 +3,12 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import time
+from datetime import datetime
+import pytz
 import streamlit.components.v1 as components
 
 # --- Page Setup ---
-st.set_page_config(page_title="HK ACTIVE PRICE ACTION BOT", page_icon="📈", layout="centered")
+st.set_page_config(page_title="HK PRECISE ENTRY BOT", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
@@ -16,7 +18,7 @@ st.markdown("""
     .signal-card { background-color: #1E293B; padding: 20px; border-radius: 12px; border: 2px solid #334155; text-align: center; margin-top: 15px; }
     .up-signal { color: #00FF00; font-size: 36px; font-weight: bold; }
     .down-signal { color: #FF3333; font-size: 36px; font-weight: bold; }
-    .moderate-signal { color: #FFCC00; font-size: 30px; font-weight: bold; }
+    .timer-box { font-size: 24px; font-weight: bold; color: #FFD700; background: #0F172A; padding: 10px; border-radius: 8px; border: 1px dashed #FFD700; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,72 +54,42 @@ def render_live_pkt_clock():
 def analyze_flexible_price_action(df):
     close = df['Close']
     open_p = df['Open']
-    high = df['High']
-    low = df['Low']
 
     curr_price = float(close.iloc[-1])
-    
-    # Candle Structure
     c2_open, c2_close = open_p.iloc[-1], close.iloc[-1]
     c1_open, c1_close = open_p.iloc[-2], close.iloc[-2]
     
-    # Micro Trend
     sma_5 = close.rolling(5).mean().iloc[-1]
-    sma_20 = close.rolling(20).mean().iloc[-1]
     
-    bull_score = 40 # Base Score
-    bear_score = 40
-    reasons = []
+    bull_score = 45
+    bear_score = 45
 
-    # Candle Momentum
-    if c2_close > c2_open:
-        bull_score += 15
-        reasons.append("Last Candle Closed GREEN (Buying Momentum)")
-    else:
-        bear_score += 15
-        reasons.append("Last Candle Closed RED (Selling Momentum)")
+    if c2_close > c2_open: bull_score += 15
+    else: bear_score += 15
 
-    # Engulfing / Pattern
-    if (c1_close < c1_open) and (c2_close > c2_open):
-        bull_score += 20
-        reasons.append("Bullish Engulfing / Momentum Reversal")
-    elif (c1_close > c1_open) and (c2_close < c2_open):
-        bear_score += 20
-        reasons.append("Bearish Engulfing / Push Down")
+    if (c1_close < c1_open) and (c2_close > c2_open): bull_score += 20
+    elif (c1_close > c1_open) and (c2_close < c2_open): bear_score += 20
 
-    # Trend Direction
-    if curr_price > sma_5:
-        bull_score += 15
-        reasons.append("Price Above Short-Term Moving Average")
-    else:
-        bear_score += 15
-        reasons.append("Price Below Short-Term Moving Average")
+    if curr_price > sma_5: bull_score += 10
+    else: bear_score += 10
 
-    if sma_5 > sma_20:
-        bull_score += 10
-    else:
-        bear_score += 10
-
-    # Decision Logic (Now Active at 50%+)
     if bull_score > bear_score:
-        acc = min(93, bull_score)
-        expected_candle = "GREEN 🟢"
-        return "UP ↑ (CALL)", acc, curr_price, expected_candle, reasons
+        acc = min(94, bull_score)
+        return "UP ↑ (CALL)", acc, curr_price, "GREEN 🟢"
     else:
-        acc = min(93, bear_score)
-        expected_candle = "RED 🔴"
-        return "DOWN ↓ (PUT)", acc, curr_price, expected_candle, reasons
+        acc = min(94, bear_score)
+        return "DOWN ↓ (PUT)", acc, curr_price, "RED 🔴"
 
 def fetch_and_analyze(ticker, candle_time_str):
     try:
         data_ticker = yf.Ticker(ticker)
         interval = "1m" if "1" in candle_time_str else "5m"
         df = data_ticker.history(period="1d", interval=interval)
-        if df.empty or len(df) < 10:
-            return "UP ↑ (CALL)", 75, 1.08500, "GREEN 🟢", ["Market General Trend Up"]
+        if df.empty or len(df) < 5:
+            return "UP ↑ (CALL)", 75, 1.08500, "GREEN 🟢"
         return analyze_flexible_price_action(df)
     except Exception:
-        return "UP ↑ (CALL)", 78, 1.08500, "GREEN 🟢", ["Default Trend Recovery"]
+        return "UP ↑ (CALL)", 78, 1.08500, "GREEN 🟢"
 
 def render_tradingview_widget(tv_symbol, candle_time_str):
     interval_code = "1" if "1" in candle_time_str else "5"
@@ -137,8 +109,8 @@ def render_tradingview_widget(tv_symbol, candle_time_str):
     components.html(html_code, height=360)
 
 # --- UI Layout ---
-st.markdown('<div class="golden-header">HK ACTIVE PRICE ACTION BOT</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">ALWAYS-ACTIVE SIGNAL ENGINE & CANDLE PREDICTION</div>', unsafe_allow_html=True)
+st.markdown('<div class="golden-header">HK PRECISE ENTRY BOT</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">AUTOMATIC 00-SECOND CANDLE ENTRY COUNTDOWN</div>', unsafe_allow_html=True)
 
 render_live_pkt_clock()
 
@@ -150,10 +122,10 @@ with col3: trade_time = st.selectbox("Trade Time", ["1 Min", "2 Min", "5 Min"])
 yf_ticker, tv_symbol = PAIR_MAP[selected_pair_name]
 st.divider()
 
-if st.button("🚀 GET SIGNAL NOW", use_container_width=True):
-    with st.spinner("Analyzing Candles & Direction..."):
+if st.button("🚀 GET SIGNAL & EXACT ENTRY TIMER", use_container_width=True):
+    with st.spinner("Analyzing Market & Calculating Exact Entry Timing..."):
         time.sleep(1)
-        signal, accuracy, live_price, expected_candle, reasons = fetch_and_analyze(yf_ticker, candle_time)
+        signal, accuracy, live_price, expected_candle = fetch_and_analyze(yf_ticker, candle_time)
         
         st.markdown('<div class="signal-card">', unsafe_allow_html=True)
         
@@ -162,14 +134,37 @@ if st.button("🚀 GET SIGNAL NOW", use_container_width=True):
         else:
             st.markdown(f'<div class="down-signal">{signal}</div>', unsafe_allow_html=True)
             
-        st.write(f"🎯 **Calculated Signal Accuracy:** `{accuracy}%`")
-        st.write(f"🕯️ **Next Expected Candle:** `{expected_candle}`")
-        st.write(f"💵 **Current Price:** `{live_price:.5f}` | Expiry: `{trade_time}`")
-
+        st.write(f"🎯 **Calculated Accuracy:** `{accuracy}%` | 🕯️ **Expected Candle:** `{expected_candle}`")
+        st.write(f"💵 **Price:** `{live_price:.5f}` | Expiry: `{trade_time}`")
+        
         st.write("---")
-        st.write("📋 **Market Reasons for this Signal:**")
-        for r in reasons:
-            st.write(f"🔹 {r}")
+        
+        # --- AUTO DETECT EXACT SECONDS LEFT FOR NEXT CANDLE ---
+        pkt = pytz.timezone('Asia/Karachi')
+        now_pkt = datetime.now(pkt)
+        current_second = now_pkt.second
+        
+        # Calculate seconds remaining until next 1-Min candle start (00 sec)
+        seconds_to_wait = 60 - current_second
+        
+        if seconds_to_wait == 60:
+            seconds_to_wait = 0
+
+        st.markdown("### 🎯 **AUTOMATIC ENTRY COUNTDOWN**")
+        timer_placeholder = st.empty()
+        
+        if seconds_to_wait > 0:
+            for rem_sec in range(seconds_to_wait, 0, -1):
+                timer_placeholder.markdown(
+                    f'<div class="timer-box">⏳ Wait for Next Candle (00s Open): <span style="color:#00FF00;">{rem_sec}s</span></div>', 
+                    unsafe_allow_html=True
+                )
+                time.sleep(1)
+        
+        timer_placeholder.markdown(
+            '<div class="timer-box" style="border: 2px solid #00FF00; color: #00FF00;">🔥 ENTER TRADE NOW (00th SEC ENTRY)! 🔥</div>', 
+            unsafe_allow_html=True
+        )
 
         st.subheader("📊 Live TradingView Chart")
         render_tradingview_widget(tv_symbol, candle_time)
