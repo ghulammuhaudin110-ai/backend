@@ -7,8 +7,8 @@ from datetime import datetime
 import pytz
 import streamlit.components.v1 as components
 
-# --- Page Setup ---
-st.page_config(page_title="HK PRECISE ENTRY BOT", page_icon="⚡", layout="centered")
+# --- Page Setup (FIXED: st.set_page_config) ---
+st.set_page_config(page_title="HK PRECISE ENTRY BOT", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
@@ -135,8 +135,6 @@ def analyze_binary_rules(df, mode):
         matched_reasons.append(f"✅ [4/4] RSI بیئرش زون میں ہے ({rsi:.1f})")
 
     # --- DUAL MODE THRESHOLD FILTER ---
-    # Normal Mode: 2 to 2.5 confirmations required out of 4
-    # Premium Mode: 3 to 4 confirmations required out of 4
     if mode == "Normal Mode (Fast Signals)":
         min_required = 2.0
     else:  # Premium Mode
@@ -253,3 +251,4 @@ if st.button("🚀 GET SIGNAL & EXACT ENTRY TIMER", use_container_width=True):
         st.subheader("📊 Live TradingView Chart")
         render_tradingview_widget(tv_symbol, candle_time)
         st.markdown('</div>', unsafe_allow_html=True)
+    
