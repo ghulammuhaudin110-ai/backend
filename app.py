@@ -82,17 +82,23 @@ PAIR_MAP = {
     "AUD/JPY": "AUDJPY=X"
 }
 
-# Live Data Fetching and Technical Calculations
+# Improved Live Data Fetching
 def fetch_and_analyze_live_market(ticker):
     try:
-        df = yf.download(tickers=ticker, period="1d", interval="1m", progress=False)
+        # Fetch data using Ticker object
+        data_ticker = yf.Ticker(ticker)
+        df = data_ticker.history(period="5d", interval="1m")
         
-        if df.empty or len(df) < 50:
+        if df.empty or len(df) < 30:
+            # Fallback to 5m interval if 1m is restricted by server
+            df = data_ticker.history(period="5d", interval="5m")
+            
+        if df.empty or len(df) < 20:
             return "MARKET CLOSED / NO DATA", 0, 0.0
 
-        close = df['Close'].squeeze()
-        high = df['High'].squeeze()
-        low = df['Low'].squeeze()
+        close = df['Close']
+        high = df['High']
+        low = df['Low']
 
         # 1. EMA 200
         ema_200 = close.ewm(span=200, adjust=False).mean()
@@ -128,8 +134,8 @@ def fetch_and_analyze_live_market(ticker):
         else:
             return "NO TRADE (Filters Active)", 0, curr_price
 
-    except Exception:
-        return "ERROR FETCHING DATA", 0, 0.0
+    except Exception as e:
+        return f"ERROR FETCHING DATA", 0, 0.0
 
 # --- Header UI ---
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
@@ -161,7 +167,7 @@ st.write("")
 # Action Button
 if st.button("🚀 START ANALYZING", use_container_width=True):
     with st.spinner(f"Live market data fetch ho raha hai: {selected_pair_name}..."):
-        time.sleep(1.5)
+        time.sleep(1)
         
         signal, accuracy, live_price = fetch_and_analyze_live_market(ticker_symbol)
         
@@ -196,8 +202,10 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
         else:
             st.markdown(f'<div class="no-signal">{signal}</div>', unsafe_allow_html=True)
             if live_price > 0:
-                st.write(f"💵 **Current Price:** `{live_price:.5f}`")
-            st.info("Market abhi band hai (Weekend) ya phir koi safe entry signal nahi mil raha hai.")
+                st.write(f"💵 **Current Live Price:** `{live_price:.5f}`")
+                st.info("Market live chal rahi hai, lekin abhi 200 EMA + RSI + Stochastic ki teeno conditions match nahi ho rahi hain. Safe entry ka intezar karein.")
+            else:
+                st.info("Market data fetch nahi ho saka. Kripya 2-3 second baad dobara 'Start Analyzing' dabayein.")
             
         st.markdown('</div>', unsafe_allow_html=True)
         
