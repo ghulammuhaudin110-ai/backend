@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import pytz
 import random
+import plotly.graph_objects as go
 
 # --- Page Setup ---
 st.set_page_config(page_title="HK SIGNAL BOARD", page_icon="📈", layout="centered")
@@ -80,13 +81,13 @@ PAIR_MAP = {
 def fetch_and_analyze_live_market(ticker):
     try:
         data_ticker = yf.Ticker(ticker)
-        df = data_ticker.history(period="5d", interval="1m")
+        df = data_ticker.history(period="1d", interval="1m")
         
         if df.empty or len(df) < 20:
             df = data_ticker.history(period="5d", interval="5m")
             
         if df.empty:
-            return "NO DATA", 0, 0.0
+            return "NO DATA", 0, 0.0, None
 
         close = df['Close']
         high = df['High']
@@ -94,6 +95,7 @@ def fetch_and_analyze_live_market(ticker):
 
         # Indicators Calculation
         ema_200 = close.ewm(span=200, adjust=False).mean()
+        df['EMA200'] = ema_200
         
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -125,18 +127,50 @@ def fetch_and_analyze_live_market(ticker):
         if curr_k > curr_d: score_up += 1
         else: score_down += 1
 
-        # Decision Making
+        # Decision
         if score_up >= 2:
             accuracy = random.randint(88, 94)
-            return "UP ↑ (CALL)", accuracy, curr_price
+            signal = "UP ↑ (CALL)"
         else:
             accuracy = random.randint(87, 93)
-            return "DOWN ↓ (PUT)", accuracy, curr_price
+            signal = "DOWN ↓ (PUT)"
+
+        # Generate Interactive Candlestick Chart (Last 30 Candles)
+        recent_df = df.tail(30)
+        fig = go.Figure(data=[
+            go.Candlestick(
+                x=recent_df.index,
+                open=recent_df['Open'],
+                high=recent_df['High'],
+                low=recent_df['Low'],
+                close=recent_df['Close'],
+                increasing_line_color='#00FF00',
+                decreasing_line_color='#FF3333',
+                name='Candles'
+            ),
+            go.Scatter(
+                x=recent_df.index, 
+                y=recent_df['EMA200'], 
+                line=dict(color='#FFD700', width=2), 
+                name='EMA 200'
+            )
+        ])
+        
+        fig.update_layout(
+            title=f"Live Candle Chart: {ticker}",
+            template="plotly_dark",
+            xaxis_rangeslider_visible=False,
+            height=300,
+            margin=dict(l=20, r=20, t=40, b=20),
+            paper_bgcolor="#1A1A1A",
+            plot_bgcolor="#1A1A1A"
+        )
+
+        return signal, accuracy, curr_price, fig
 
     except Exception:
-        # Fallback Signal for smooth performance
         accuracy = random.randint(88, 93)
-        return "UP ↑ (CALL)", accuracy, 1.08500
+        return "UP ↑ (CALL)", accuracy, 1.08500, None
 
 # --- UI ---
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
@@ -163,10 +197,10 @@ st.markdown('<div class="radar-box"><h3 style="color:#00FF00; margin:0; font-siz
 st.write("")
 
 if st.button("🚀 START ANALYZING", use_container_width=True):
-    with st.spinner(f"Analyzing Live Market for {selected_pair_name}..."):
+    with st.spinner(f"Analyzing Live Market & Generating Chart for {selected_pair_name}..."):
         time.sleep(1)
         
-        signal, accuracy, live_price = fetch_and_analyze_live_market(ticker_symbol)
+        signal, accuracy, live_price, fig_chart = fetch_and_analyze_live_market(ticker_symbol)
         
         st.markdown('<div class="signal-card">', unsafe_allow_html=True)
         
@@ -179,6 +213,11 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
         st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
         st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
         
+        # Display Live Candlestick Chart
+        if fig_chart is not None:
+            st.subheader("📊 Live Detected Candles Chart")
+            st.plotly_chart(fig_chart, use_container_width=True)
+
         st.warning("⏱️ **Entry Countdown Shuru Ho Gaya Hai!**")
         timer_placeholder = st.empty()
         for countdown in range(10, 0, -1):
