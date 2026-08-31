@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 import pytz
 import random
-import plotly.graph_objects as go
+import streamlit.components.v1 as components
 
 # --- Page Setup ---
 st.set_page_config(page_title="HK SIGNAL BOARD", page_icon="📈", layout="centered")
@@ -66,16 +66,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 PAIR_MAP = {
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
-    "USD/JPY": "JPY=X",
-    "AUD/USD": "AUDUSD=X",
-    "USD/CAD": "CAD=X",
-    "USD/CHF": "CHF=X",
-    "EUR/GBP": "EURGBP=X",
-    "EUR/JPY": "EURJPY=X",
-    "GBP/JPY": "GBPJPY=X",
-    "AUD/JPY": "AUDJPY=X"
+    "EUR/USD": ("EURUSD=X", "FX:EURUSD"),
+    "GBP/USD": ("GBPUSD=X", "FX:GBPUSD"),
+    "USD/JPY": ("JPY=X", "FX:USDJPY"),
+    "AUD/USD": ("AUDUSD=X", "FX:AUDUSD"),
+    "USD/CAD": ("CAD=X", "FX:USDCAD"),
+    "USD/CHF": ("CHF=X", "FX:USDCHF"),
+    "EUR/GBP": ("EURGBP=X", "FX:EURGBP"),
+    "EUR/JPY": ("EURJPY=X", "FX:EURJPY"),
+    "GBP/JPY": ("GBPJPY=X", "FX:GBPJPY"),
+    "AUD/JPY": ("AUDJPY=X", "FX:AUDJPY")
 }
 
 def fetch_and_analyze_live_market(ticker):
@@ -87,7 +87,7 @@ def fetch_and_analyze_live_market(ticker):
             df = data_ticker.history(period="5d", interval="5m")
             
         if df.empty:
-            return "NO DATA", 0, 0.0, None
+            return "NO DATA", 0, 0.0
 
         close = df['Close']
         high = df['High']
@@ -95,7 +95,6 @@ def fetch_and_analyze_live_market(ticker):
 
         # Indicators Calculation
         ema_200 = close.ewm(span=200, adjust=False).mean()
-        df['EMA200'] = ema_200
         
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -127,7 +126,6 @@ def fetch_and_analyze_live_market(ticker):
         if curr_k > curr_d: score_up += 1
         else: score_down += 1
 
-        # Decision
         if score_up >= 2:
             accuracy = random.randint(88, 94)
             signal = "UP ↑ (CALL)"
@@ -135,42 +133,40 @@ def fetch_and_analyze_live_market(ticker):
             accuracy = random.randint(87, 93)
             signal = "DOWN ↓ (PUT)"
 
-        # Generate Interactive Candlestick Chart (Last 30 Candles)
-        recent_df = df.tail(30)
-        fig = go.Figure(data=[
-            go.Candlestick(
-                x=recent_df.index,
-                open=recent_df['Open'],
-                high=recent_df['High'],
-                low=recent_df['Low'],
-                close=recent_df['Close'],
-                increasing_line_color='#00FF00',
-                decreasing_line_color='#FF3333',
-                name='Candles'
-            ),
-            go.Scatter(
-                x=recent_df.index, 
-                y=recent_df['EMA200'], 
-                line=dict(color='#FFD700', width=2), 
-                name='EMA 200'
-            )
-        ])
-        
-        fig.update_layout(
-            title=f"Live Candle Chart: {ticker}",
-            template="plotly_dark",
-            xaxis_rangeslider_visible=False,
-            height=300,
-            margin=dict(l=20, r=20, t=40, b=20),
-            paper_bgcolor="#1A1A1A",
-            plot_bgcolor="#1A1A1A"
-        )
-
-        return signal, accuracy, curr_price, fig
+        return signal, accuracy, curr_price
 
     except Exception:
         accuracy = random.randint(88, 93)
-        return "UP ↑ (CALL)", accuracy, 1.08500, None
+        return "UP ↑ (CALL)", accuracy, 1.08500
+
+# Function to Render Real TradingView Chart Widget
+def render_tradingview_widget(tv_symbol):
+    html_code = f"""
+    <div class="tradingview-widget-container" style="height:350px;width:100%;">
+      <div id="tradingview_chart" style="height:350px;width:100%;"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+        "autosize": true,
+        "symbol": "{tv_symbol}",
+        "interval": "1",
+        "timezone": "Asia/Karachi",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "hide_top_toolbar": true,
+        "hide_legend": false,
+        "save_image": false,
+        "container_id": "tradingview_chart"
+      }}
+      );
+      </script>
+    </div>
+    """
+    components.html(html_code, height=360)
 
 # --- UI ---
 st.markdown('<div class="golden-header">HK SIGNAL BOARD</div>', unsafe_allow_html=True)
@@ -189,7 +185,7 @@ with col2:
 with col3:
     trade_time = st.selectbox("Trade Time", ["1 Min", "2 Min", "5 Min"])
 
-ticker_symbol = PAIR_MAP[selected_pair_name]
+yf_ticker, tv_symbol = PAIR_MAP[selected_pair_name]
 
 st.divider()
 
@@ -197,10 +193,10 @@ st.markdown('<div class="radar-box"><h3 style="color:#00FF00; margin:0; font-siz
 st.write("")
 
 if st.button("🚀 START ANALYZING", use_container_width=True):
-    with st.spinner(f"Analyzing Live Market & Generating Chart for {selected_pair_name}..."):
+    with st.spinner(f"Analyzing Live Market for {selected_pair_name}..."):
         time.sleep(1)
         
-        signal, accuracy, live_price, fig_chart = fetch_and_analyze_live_market(ticker_symbol)
+        signal, accuracy, live_price = fetch_and_analyze_live_market(yf_ticker)
         
         st.markdown('<div class="signal-card">', unsafe_allow_html=True)
         
@@ -213,10 +209,9 @@ if st.button("🚀 START ANALYZING", use_container_width=True):
         st.write(f"💵 **Live Market Price:** `{live_price:.5f}`")
         st.write(f"📊 **Asset:** `{selected_pair_name}` | ⏱️ **Expiry:** `{trade_time}`")
         
-        # Display Live Candlestick Chart
-        if fig_chart is not None:
-            st.subheader("📊 Live Detected Candles Chart")
-            st.plotly_chart(fig_chart, use_container_width=True)
+        # Real TradingView Live Chart Embed
+        st.subheader("📊 Real TradingView Live Chart")
+        render_tradingview_widget(tv_symbol)
 
         st.warning("⏱️ **Entry Countdown Shuru Ho Gaya Hai!**")
         timer_placeholder = st.empty()
