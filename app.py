@@ -53,12 +53,8 @@ def render_live_pkt_clock():
     """
     components.html(clock_html, height=45)
 
-# --- SINGLE SINGLE-MODE PROFESSIONAL ALGORITHM ---
+# --- HIGH-ACCURACY PROFESSIONAL ALGORITHM ---
 def analyze_binary_rules(df):
-    """
-    Professional Binary Options Algorithm
-    Base Accuracy starts at 80% on 2 Valid Rules.
-    """
     if len(df) < 50:
         return "NO TRADE ⚠️", 0, float(df['Close'].iloc[-1]), "NEUTRAL ⚪", ["مارکیٹ ڈیٹا ناکافی ہے"]
 
@@ -68,7 +64,7 @@ def analyze_binary_rules(df):
     low = df['Low']
     curr_price = float(close.iloc[-1])
 
-    # Indicators
+    # Dynamic Moving Averages
     ema_20 = close.ewm(span=20, adjust=False).mean().iloc[-1]
     ema_50 = close.ewm(span=50, adjust=False).mean().iloc[-1]
 
@@ -79,7 +75,7 @@ def analyze_binary_rules(df):
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs.iloc[-1]))
 
-    # Candlestick Values
+    # Candlesticks
     c1_open, c1_close = open_p.iloc[-2], close.iloc[-2]
     c1_high, c1_low = high.iloc[-2], low.iloc[-2]
     c2_open, c2_close = open_p.iloc[-1], close.iloc[-1]
@@ -88,15 +84,18 @@ def analyze_binary_rules(df):
     bear_score = 0
     matched_reasons = []
 
-    # 📌 CONFIRMATION 1: Trend Alignment (EMA)
-    if curr_price > ema_20:
-        bull_score += 1
-        matched_reasons.append("✅ [1] اپ ٹرینڈ کنفرمیشن (Price > EMA 20)")
-    elif curr_price < ema_20:
-        bear_score += 1
-        matched_reasons.append("✅ [1] ڈاؤن ٹرینڈ کنفرمیشن (Price < EMA 20)")
+    # 📌 RULE 1: STRICT TREND ALIGNMENT (Major Filter)
+    trend_up = curr_price > ema_20 and ema_20 > ema_50
+    trend_down = curr_price < ema_20 and ema_20 < ema_50
 
-    # 📌 CONFIRMATION 2: Price Action Wick Rejection & SnR Zone
+    if trend_up:
+        bull_score += 1
+        matched_reasons.append("✅ [1] اپ ٹرینڈ کنفرمیشن (Price > EMA 20 > EMA 50)")
+    elif trend_down:
+        bear_score += 1
+        matched_reasons.append("✅ [1] ڈاؤن ٹرینڈ کنفرمیشن (Price < EMA 20 < EMA 50)")
+
+    # 📌 RULE 2: PRICE ACTION & WICK REJECTION
     c1_body = abs(c1_close - c1_open)
     c1_lower_wick = min(c1_open, c1_close) - c1_low
     c1_upper_wick = c1_high - max(c1_open, c1_close)
@@ -104,46 +103,46 @@ def analyze_binary_rules(df):
     recent_low = low.iloc[-20:-1].min()
     recent_high = high.iloc[-20:-1].max()
 
-    if (c1_lower_wick > c1_body * 1.1) or (abs(curr_price - recent_low) / curr_price < 0.0008):
-        bull_score += 1
-        matched_reasons.append("✅ [2] سپورٹ لیول پر بولش پرائس ایکشن (Lower Wick Rejection)")
-    elif (c1_upper_wick > c1_body * 1.1) or (abs(curr_price - recent_high) / curr_price < 0.0008):
-        bear_score += 1
-        matched_reasons.append("✅ [2] ریزسٹنس لیول پر بیئرش پرائس ایکشن (Upper Wick Rejection)")
+    if (c1_lower_wick > c1_body * 1.3) or (abs(curr_price - recent_low) / curr_price < 0.0006):
+        if trend_up:  # Only count if supported by trend
+            bull_score += 1
+            matched_reasons.append("✅ [2] سپورٹ زون سے بولش وک ریجیکشن (Buyer Pressure)")
+    elif (c1_upper_wick > c1_body * 1.3) or (abs(curr_price - recent_high) / curr_price < 0.0006):
+        if trend_down:  # Only count if supported by trend
+            bear_score += 1
+            matched_reasons.append("✅ [3] ریزسٹنس زون سے بیئرش وک ریجیکشن (Seller Pressure)")
 
-    # 📌 CONFIRMATION 3: Engulfing Pattern
+    # 📌 RULE 3: CANDLESTICK PATTERN (ENGULFING)
     if (c1_close < c1_open) and (c2_close > c2_open) and (c2_close > c1_open):
         bull_score += 1
-        matched_reasons.append("✅ [3] بولش اینگلفنگ کینڈل پیٹرن (Bullish Engulfing)")
+        matched_reasons.append("✅ [3] بولش اینگلفنگ پیٹرن (Bullish Momentum)")
     elif (c1_close > c1_open) and (c2_close < c2_open) and (c2_close < c1_open):
         bear_score += 1
-        matched_reasons.append("✅ [3] بیئرش اینگلفنگ کینڈل پیٹرن (Bearish Engulfing)")
+        matched_reasons.append("✅ [3] بیئرش اینگلفنگ پیٹرن (Bearish Momentum)")
 
-    # 📌 CONFIRMATION 4: RSI Levels
-    if rsi <= 42:
+    # 📌 RULE 4: RSI EXTREMES
+    if rsi <= 35:
         bull_score += 1
-        matched_reasons.append(f"✅ [4] RSI بولش زون میں ہے ({rsi:.1f})")
-    elif rsi >= 58:
+        matched_reasons.append(f"✅ [4] RSI شدید اوور سولڈ زون میں ہے ({rsi:.1f})")
+    elif rsi >= 65:
         bear_score += 1
-        matched_reasons.append(f"✅ [4] RSI بیئرش زون میں ہے ({rsi:.1f})")
+        matched_reasons.append(f"✅ [4] RSI شدید اوور باٹ زون میں ہے ({rsi:.1f})")
 
-    # --- ACCURACY CALCULATION (Starts at 80% for 2 matching rules) ---
-    min_required_rules = 2
+    # --- STRICT ACCURACY FILTER (Min 3 Confirmations Required) ---
+    min_required_rules = 3
 
     if bull_score >= min_required_rules and bull_score > bear_score:
-        # 2 Rules = 80%, 3 Rules = 90%, 4 Rules = 95%
-        accuracy = 80 + (bull_score - 2) * 8
-        if accuracy > 95: accuracy = 95
+        accuracy = 85 if bull_score == 3 else 92
         return "UP ↑ (CALL)", accuracy, curr_price, "GREEN 🟢", matched_reasons
 
     elif bear_score >= min_required_rules and bear_score > bull_score:
-        accuracy = 80 + (bear_score - 2) * 8
-        if accuracy > 95: accuracy = 95
+        accuracy = 85 if bear_score == 3 else 92
         return "DOWN ↓ (PUT)", accuracy, curr_price, "RED 🔴", matched_reasons
 
     else:
+        active_score = max(bull_score, bear_score)
         return "NO TRADE ⚠️ (WAIT)", 0, curr_price, "NEUTRAL ⚪", [
-            f"⚠️ کم از کم {min_required_rules} پروفیشنل تکنیکی کنفرمیشنز کا ہونا ضروری ہے۔ مارکیٹ فلیٹ ہے، اینٹری اسکپ کر دی گئی ہے۔"
+            f"⚠️ محفوظ اینٹری کے لیے کم از کم {min_required_rules} کنفرمیشنز لازمی ہیں (اس وقت صرف {active_score} میچ ہوئی ہیں)۔ نقصان سے بچنے کے لیے اینٹری اسکپ کی گئی ہے۔"
         ]
 
 def fetch_and_analyze(ticker, candle_time_str):
@@ -176,7 +175,7 @@ def render_tradingview_widget(tv_symbol, candle_time_str):
 
 # --- UI Layout ---
 st.markdown('<div class="golden-header">HK PRECISE ENTRY BOT</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">PROFESSIONAL BINARY OPTIONS TRADING SYSTEM</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">PRO BINARY OPTIONS STRICT FILTER TRADING SYSTEM</div>', unsafe_allow_html=True)
 
 render_live_pkt_clock()
 
@@ -243,3 +242,4 @@ if st.button("🚀 GET SIGNAL & EXACT ENTRY TIMER", use_container_width=True):
         st.subheader("📊 Live TradingView Chart")
         render_tradingview_widget(tv_symbol, candle_time)
         st.markdown('</div>', unsafe_allow_html=True)
+        
